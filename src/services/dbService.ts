@@ -155,21 +155,30 @@ export async function dbFetchPosters() {
 // ==========================================
 
 export async function dbSaveTestQuestion(test: {
+  clientId: string;
   subject: string;
   unitCode: string;
   questionText: string;
   options: string[];
-  correctAnswer: string;
+  correctIndex: number;
   explanation: string;
+  hint?: string;
+  questionImage?: string;
+  explanationImage?: string;
 }) {
   const { data, error } = await supabase.from('test_questions').insert([
     {
+      client_id: test.clientId,
       subject: test.subject,
       unit_code: test.unitCode,
       question_text: test.questionText,
       options: test.options,
-      correct_answer: test.correctAnswer,
+      correct_answer: test.options[test.correctIndex] || '',
+      correct_index: test.correctIndex,
       explanation: test.explanation,
+      hint: test.hint || null,
+      question_image: test.questionImage || null,
+      explanation_image: test.explanationImage || null,
     },
   ]).select();
 
@@ -178,6 +187,19 @@ export async function dbSaveTestQuestion(test: {
     return { success: false, error: error.message };
   }
   return { success: true, data };
+}
+
+export async function dbDeleteTestQuestion(clientId: string) {
+  const { error } = await supabase
+    .from('test_questions')
+    .delete()
+    .eq('client_id', clientId);
+
+  if (error) {
+    console.warn('단원평가 문제 삭제 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }
 
 export async function dbFetchTestQuestions() {

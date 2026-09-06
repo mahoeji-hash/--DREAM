@@ -11,6 +11,8 @@ import { SubjectType, GradeType, TextbookInfo, ProblemItem, SolutionStep, UserRo
 import { getStoredUnitQuizzes, saveStoredUnitQuizzes, UnitQuiz, QuizQuestion } from '../data/mockUnitTests';
 import { getCurriculumForSubject, ChapterGroup, SubUnitItem } from '../data/curriculumData';
 import { UnitTestModal } from './UnitTestModal';
+import { dbSaveTestQuestion, dbFetchTestQuestions, dbDeleteTestQuestion } from '../services/dbService';
+import { isSupabaseConfigured } from '../supabaseClient';
 import { InterestingFactsGallery } from './InterestingFactsGallery';
 import { ConceptMasterView } from './ConceptMasterView';
 import { compressImageFile } from '../services/imageService';
@@ -102,7 +104,38 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
 
   // Unit Quizzes State & Admin Persistence
   const [allQuizzes, setAllQuizzes] = useState<UnitQuiz[]>(() => getStoredUnitQuizzes());
-  
+    // Supabase 클라우드에서 TEST 문제 불러와 병합
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    dbFetchTestQuestions().then((cloudQuestions) => {
+      if (!Array.isArray(cloudQuestions) || cloudQuestions.length === 0) return;
+      setAllQuizzes((prevQuizzes) =>
+        prevQuizzes.map((quiz) => {
+          const relevant = cloudQuestions.filter(
+            (q: any) => q.unit_code === quiz.unitCode && q.subject === quiz.subject
+          );
+          const existingIds = new Set(quiz.questions.map((q) => q.id));
+          const newOnes = relevant
+            .filter((q: any) => q.client_id && !existingIds.has(q.client_id))
+            .map((q: any) => ({
+              id: q.client_id,
+              questionText: q.question_text,
+              options: q.options || [],
+              correctIndex: q.correct_index ?? 0,
+              explanation: q.explanation || '',
+              hint: q.hint || undefined,
+              questionImage: q.question_image || undefined,
+              explanationImage: q.explanation_image || undefined,
+            }));
+          if (newOnes.length === 0) return quiz;
+          return {
+            ...quiz,
+            questions: [...quiz.questions, ...newOnes],
+          };
+        })
+      );
+    });
+  }, []);
   useEffect(() => {
     if (subject === 'math' && activeTab === 'concepts') {
       setActiveTab('problems');
@@ -309,9 +342,30 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
       return quiz;
     });
 
-    setAllQuizzes(updated);
+        setAllQuizzes(updated);
     saveStoredUnitQuizzes(updated);
     setShowAddQuizModal(false);
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      const targetQuiz = allQuizzes.find((q) => q.id === targetQuizIdForAdd);
+      if (targetQuiz) {
+        dbSaveTestQuestion({
+          clientId: newQuestion.id,
+          subject: targetQuiz.subject,
+          unitCode: targetQuiz.unitCode,
+          questionText: newQuestion.questionText,
+          options: newQuestion.options,
+          correctIndex: newQuestion.correctIndex,
+          explanation: newQuestion.explanation,
+          hint: newQuestion.hint,
+          questionImage: newQuestion.questionImage,
+          explanationImage: newQuestion.explanationImage,
+        }).then((result) => {
+          if (!result.success) console.error('TEST 문제 DB 저장 실패:', result.error);
+        });
+      }
+    }
   };
 
   const handleDeleteQuizQuestion = (quizId: string, questionId: string) => {
@@ -334,10 +388,17 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
       return quiz;
     });
 
-    setAllQuizzes(updated);
+        setAllQuizzes(updated);
     saveStoredUnitQuizzes(updated);
     setToastNotice('문항이 성공적으로 삭제되었습니다.');
     setTimeout(() => setToastNotice(null), 3000);
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteTestQuestion(questionId).then((result) => {
+        if (!result.success) console.error('TEST 문제 DB 삭제 실패:', result.error);
+      });
+    }
   };
 
   const handleOpenEditQuizTime = (quiz: UnitQuiz) => {
