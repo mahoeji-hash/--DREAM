@@ -1,0 +1,6 @@
+{
+  "name": "풀어 DREAM",
+  "description": "수학·과학 교과서 및 연습장 문제별 맞춤 풀이와 사진 촬영 질문 해결을 제공하는 친절한 학습 도우미",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

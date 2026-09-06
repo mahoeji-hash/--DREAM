@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.018em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    word-break: keep-all;
+  }
+}
+
+.font-logo-kr {
+  font-family: 'Jua', 'Pretendard', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.font-logo-en {
+  font-family: 'Fredoka', 'Outfit', sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.font-cute {
+  font-family: 'Jua', sans-serif;
+}
