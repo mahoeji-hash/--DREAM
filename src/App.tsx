@@ -23,6 +23,7 @@ import {
   dbDeleteConcept,
   dbToggleLikeConcept,
   dbSaveQuizAttempt,
+  dbSaveWrongAnswer,
 } from './services/dbService';
 import { isSupabaseConfigured, testSupabaseConnection } from './supabaseClient';
 import { cleanLegacyStorageKeys, safeLocalStorageSet } from './services/storageService';
@@ -337,6 +338,27 @@ export default function App() {
         completedAt: (attempt as any).completedAt,
       }).then((result) => {
         if (!result.success) console.error('퀴즈 기록 DB 저장 실패:', result.error);
+      });
+
+      // 오답노트 개별 항목 DB 저장
+      attempt.wrongAnswers.forEach((w: any) => {
+        dbSaveWrongAnswer(activeUserId, {
+          id: w.id,
+          quizId: attempt.quizId,
+          quizTitle: (attempt as any).quizTitle,
+          unitName: (attempt as any).unitName,
+          subject: (attempt as any).subject,
+          question: w.questionText,
+          options: w.options,
+          userAnswerIndex: w.userAnswerIndex,
+          correctIndex: w.correctIndex,
+          explanation: w.explanation,
+          hint: w.hint,
+          userAttachedPhotos: w.userAttachedPhotos,
+          isReviewed: w.isReviewed || false,
+        }).then((result) => {
+          if (!result.success) console.error('오답 DB 저장 실패:', result.error);
+        });
       });
     }
   };

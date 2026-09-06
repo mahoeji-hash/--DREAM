@@ -4,7 +4,7 @@ import {
   Check,
   Trash2,
   CheckCircle2,
-  Sparkles,
+  Sparkles,     
   ChevronDown,
   ChevronUp,
   RotateCcw,
@@ -32,6 +32,8 @@ import {
   QuizAttemptRecord,
   SubjectType,
 } from '../types';
+import { dbDeleteWrongAnswer, dbUpdateWrongAnswerReviewed } from '../services/dbService';
+import { isSupabaseConfigured } from '../supabaseClient';
 
 interface WrongAnswersNoteViewProps {
   userProfile: UserProfile;
@@ -125,23 +127,49 @@ export const WrongAnswersNoteView: React.FC<WrongAnswersNoteViewProps> = ({
   };
 
   const handleToggleReviewed = (wrongId: string) => {
+    let newReviewedState = false;
     const updated = wrongQuestions.map((item) => {
       if (item.id === wrongId) {
-        return { ...item, isReviewed: !item.isReviewed };
+        newReviewedState = !item.isReviewed;
+        return { ...item, isReviewed: newReviewedState };
       }
       return item;
     });
     onUpdateProfile({ wrongQuizQuestions: updated });
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbUpdateWrongAnswerReviewed(wrongId, newReviewedState).then((result) => {
+        if (!result.success) console.error('복습 상태 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleDeleteWrongAnswer = (wrongId: string) => {
     const updated = wrongQuestions.filter((item) => item.id !== wrongId);
     onUpdateProfile({ wrongQuizQuestions: updated });
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteWrongAnswer(wrongId).then((result) => {
+        if (!result.success) console.error('오답 DB 삭제 실패:', result.error);
+      });
+    }
   };
 
   const handleClearAllWrongAnswers = () => {
+    const idsToDelete = wrongQuestions.map((item) => item.id);
     onUpdateProfile({ wrongQuizQuestions: [] });
     setShowClearConfirm(false);
+
+    // Supabase 클라우드 DB 전체 삭제
+    if (isSupabaseConfigured) {
+      idsToDelete.forEach((id) => {
+        dbDeleteWrongAnswer(id).then((result) => {
+          if (!result.success) console.error('오답 DB 삭제 실패:', result.error);
+        });
+      });
+    }
   };
 
   const handleSelectRetestOption = (wrongId: string, optionIdx: number) => {
