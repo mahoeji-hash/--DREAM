@@ -23,6 +23,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { UnitQuiz, QuizQuestion } from '../data/mockUnitTests';
+import { compressImageFile } from '../services/imageService';
 import { QuizAttemptRecord, QuizWrongAnswer } from '../types';
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
@@ -177,24 +178,20 @@ export const UnitTestModal: React.FC<UnitTestModalProps> = ({
   };
 
   // Photo Attachment Handlers
-  const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (typeof ev.target?.result === 'string') {
-        const photoData = ev.target.result;
-        setAttachedPhotos((prev) => {
-          const currentList = prev[currentIndex] || [];
-          return {
-            ...prev,
-            [currentIndex]: [...currentList, photoData],
-          };
-        });
-      }
-    };
-    reader.readAsDataURL(file);
+    const photoData = await compressImageFile(file);
+    if (photoData) {
+      setAttachedPhotos((prev) => {
+        const currentList = prev[currentIndex] || [];
+        return {
+          ...prev,
+          [currentIndex]: [...currentList, photoData],
+        };
+      });
+    }
     e.target.value = '';
   };
 

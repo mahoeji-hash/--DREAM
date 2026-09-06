@@ -418,30 +418,25 @@ export const INITIAL_CONCEPTS: ConceptItem[] = [
   }
 ];
 
+import {
+  idbSet,
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+} from '../services/storageService';
+
 const LOCAL_STORAGE_CONCEPTS_KEY = 'puleo_concepts_data_v1';
 
 export function getStoredConcepts(): ConceptItem[] {
-  try {
-    const saved = localStorage.getItem(LOCAL_STORAGE_CONCEPTS_KEY);
-    if (!saved) {
-      localStorage.setItem(LOCAL_STORAGE_CONCEPTS_KEY, JSON.stringify(INITIAL_CONCEPTS));
-      return INITIAL_CONCEPTS;
-    }
-    const parsed = JSON.parse(saved);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    return INITIAL_CONCEPTS;
-  } catch (e) {
-    console.error('Failed to load stored concepts:', e);
-    return INITIAL_CONCEPTS;
+  const parsed = safeLocalStorageGet<ConceptItem[]>(LOCAL_STORAGE_CONCEPTS_KEY, []);
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed;
   }
+  return INITIAL_CONCEPTS;
 }
 
 export function saveStoredConcepts(concepts: ConceptItem[]): void {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_CONCEPTS_KEY, JSON.stringify(concepts));
-  } catch (e) {
-    console.error('Failed to save concepts:', e);
-  }
+  if (!Array.isArray(concepts)) return;
+  idbSet(LOCAL_STORAGE_CONCEPTS_KEY, concepts).catch(() => {});
+  safeLocalStorageSet(LOCAL_STORAGE_CONCEPTS_KEY, concepts);
 }
+

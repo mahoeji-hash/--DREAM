@@ -27,6 +27,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { InterestingFactItem, ComicCut, SubjectType, UserRole } from '../types';
+import { compressImageFile } from '../services/imageService';
 
 interface InterestingFactsGalleryProps {
   subject: SubjectType;
@@ -180,29 +181,22 @@ export const InterestingFactsGallery: React.FC<InterestingFactsGalleryProps> = (
   const cutFileInputRef = useRef<HTMLInputElement>(null);
   const cutCameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleMainImageFileRead = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        setPosterImage(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleMainImageFileRead = async (file: File) => {
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setPosterImage(compressed);
+    }
   };
 
-  const handleCutImageFileRead = (file: File, cutIndex: number) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        const dataUrl = e.target.result;
-        setComicCutsForm((prev) => {
-          const next = [...prev];
-          next[cutIndex] = { ...next[cutIndex], imageUrl: dataUrl };
-          return next;
-        });
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleCutImageFileRead = async (file: File, cutIndex: number) => {
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setComicCutsForm((prev) => {
+        const next = [...prev];
+        next[cutIndex] = { ...next[cutIndex], imageUrl: compressed };
+        return next;
+      });
+    }
   };
 
   const handleAddCut = () => {

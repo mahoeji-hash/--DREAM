@@ -13,6 +13,7 @@ import { getCurriculumForSubject, ChapterGroup, SubUnitItem } from '../data/curr
 import { UnitTestModal } from './UnitTestModal';
 import { InterestingFactsGallery } from './InterestingFactsGallery';
 import { ConceptMasterView } from './ConceptMasterView';
+import { compressImageFile } from '../services/imageService';
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 
@@ -237,14 +238,11 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
     };
   }, []);
 
-  const handleImageFileRead = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        setNewSolutionImage(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleImageFileRead = async (file: File) => {
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setNewSolutionImage(compressed);
+    }
   };
 
   // High 1 Subject major chapter quizzes
@@ -641,15 +639,12 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
     );
   };
 
-  const handleBatchImageFileRead = (file: File) => {
+  const handleBatchImageFileRead = async (file: File) => {
     if (!activeBatchDraftIdForImage) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        handleUpdateBatchDraftField(activeBatchDraftIdForImage, 'solutionImage', e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      handleUpdateBatchDraftField(activeBatchDraftIdForImage, 'solutionImage', compressed);
+    }
   };
 
   // Single / Continuous Problem Creation
@@ -1900,16 +1895,13 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          if (typeof ev.target?.result === 'string') {
-                            setNewQuizQuestionImage(ev.target.result);
-                          }
-                        };
-                        reader.readAsDataURL(file);
+                        const compressed = await compressImageFile(file);
+                        if (compressed) {
+                          setNewQuizQuestionImage(compressed);
+                        }
                         e.target.value = '';
                       }}
                     />
@@ -2098,16 +2090,13 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          if (typeof ev.target?.result === 'string') {
-                            setNewQuizExplanationImage(ev.target.result);
-                          }
-                        };
-                        reader.readAsDataURL(file);
+                        const compressed = await compressImageFile(file);
+                        if (compressed) {
+                          setNewQuizExplanationImage(compressed);
+                        }
                         e.target.value = '';
                       }}
                     />

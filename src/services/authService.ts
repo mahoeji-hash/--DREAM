@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { UserAccount, UserProfile, GradeType } from '../types';
+import { safeLocalStorageGet, safeLocalStorageSet } from './storageService';
 
 const STORAGE_ACCOUNTS_KEY = 'puleo_dream_user_accounts_v3';
 
@@ -7,22 +8,13 @@ export const ADMIN_CREATION_SECRET_KEY = 'dream2026';
 
 // 로컬 스토리지에 캐시된 계정 목록 반환 (동기 함수)
 export const getStoredAccounts = (): UserAccount[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_ACCOUNTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = safeLocalStorageGet<UserAccount[]>(STORAGE_ACCOUNTS_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
 };
 
 export const saveAccountsToLocalStorage = (accounts: UserAccount[]): void => {
-  try {
-    localStorage.setItem(STORAGE_ACCOUNTS_KEY, JSON.stringify(accounts));
-  } catch (err) {
-    console.error('Failed to save accounts to storage:', err);
-  }
+  if (!Array.isArray(accounts)) return;
+  safeLocalStorageSet(STORAGE_ACCOUNTS_KEY, accounts);
 };
 
 // 전체 계정 목록 조회 (비동기 DB)

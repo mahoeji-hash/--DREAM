@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CommunityQuestion, TeacherAnswer, UserProfile, SubjectType, SolutionStep } from '../types';
+import { compressImageFile } from '../services/imageService';
 
 interface CommunityQnAViewProps {
   userProfile: UserProfile;
@@ -96,15 +97,12 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
     }
   };
 
-  const handleImageFileRead = (file: File, callback: (url: string) => void) => {
+  const handleImageFileRead = async (file: File, callback: (url: string) => void) => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        callback(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      callback(compressed);
+    }
   };
 
   // Submit New Question

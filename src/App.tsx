@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { TEXTBOOKS, getStoredProblems, saveStoredProblems } from './data/mockTextbooks';
+import { TEXTBOOKS, getStoredProblems, saveStoredProblems, hydrateProblemsFromIndexedDB } from './data/mockTextbooks';
 import { getStoredQuestions, saveStoredQuestions } from './data/mockCommunityQuestions';
 import { getStoredInterestingFacts, saveStoredInterestingFacts } from './data/mockInterestingFacts';
 import { getStoredConcepts, saveStoredConcepts } from './data/mockConcepts';
@@ -8,6 +8,7 @@ import { ProblemItem, TextbookInfo, UserProfile, AIQuestionResult, CommunityQues
 import { getStoredAccounts, fetchStoredAccountsFromDB } from './services/authService';
 import { dbFetchCommunityQuestions, dbFetchTextbookProblems, dbFetchInterestingFacts } from './services/dbService';
 import { isSupabaseConfigured, testSupabaseConnection } from './supabaseClient';
+import { cleanLegacyStorageKeys, safeLocalStorageSet } from './services/storageService';
 import { HomeScreen } from './components/HomeScreen';
 import { TextbookMasterView } from './components/TextbookMasterView';
 import { ProblemDetailModal } from './components/ProblemDetailModal';
@@ -89,6 +90,26 @@ export default function App() {
     return DEFAULT_PROFILE;
   });
 
+  // Initial storage maintenance & IndexedDB hydration
+  useEffect(() => {
+    cleanLegacyStorageKeys();
+
+    hydrateProblemsFromIndexedDB().then((idbProblems) => {
+      if (Array.isArray(idbProblems) && idbProblems.length > 0) {
+        setProblems((prev) => {
+          // If IndexedDB has items, use them or merge them
+          if (prev.length === 0) return idbProblems;
+          const map = new Map<string, ProblemItem>();
+          idbProblems.forEach((p) => map.set(p.id, p));
+          prev.forEach((p) => {
+            if (!map.has(p.id)) map.set(p.id, p);
+          });
+          return Array.from(map.values());
+        });
+      }
+    });
+  }, []);
+
   // Save to local storage on changes
   useEffect(() => {
     saveStoredProblems(problems);
@@ -107,11 +128,11 @@ export default function App() {
   }, [concepts]);
 
   useEffect(() => {
-    localStorage.setItem('puleo_user_profile', JSON.stringify(userProfile));
+    safeLocalStorageSet('puleo_user_profile', userProfile);
   }, [userProfile]);
 
   useEffect(() => {
-    localStorage.setItem('puleo_is_logged_in', isLoggedIn ? 'true' : 'false');
+    safeLocalStorageSet('puleo_is_logged_in', isLoggedIn ? 'true' : 'false');
   }, [isLoggedIn]);
 
   // Supabase 클라우드 데이터 실시간 동기화

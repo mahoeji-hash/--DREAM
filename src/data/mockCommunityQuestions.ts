@@ -1,5 +1,10 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { CommunityQuestion } from '../types';
+import {
+  idbSet,
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+} from '../services/storageService';
 
 export const INITIAL_MOCK_QUESTIONS: CommunityQuestion[] = [];
 export const INITIAL_QUESTIONS: CommunityQuestion[] = INITIAL_MOCK_QUESTIONS;
@@ -8,27 +13,26 @@ export const mockCommunityQuestions: CommunityQuestion[] = INITIAL_MOCK_QUESTION
 const STORAGE_KEY = 'puleo_community_questions_v3';
 
 export function getStoredQuestions(): CommunityQuestion[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const list = safeLocalStorageGet<CommunityQuestion[]>(STORAGE_KEY, []);
+  return Array.isArray(list) ? list : [];
 }
 
 export function saveStoredQuestions(questions: CommunityQuestion[] | any): void {
-  try {
-    if (Array.isArray(questions)) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(questions));
-    }
-  } catch (err) {
-    console.error('Failed to save questions:', err);
-  }
+  if (!Array.isArray(questions)) return;
+
+  idbSet(STORAGE_KEY, questions).catch(() => {});
+
+  safeLocalStorageSet(STORAGE_KEY, questions, (qs) => {
+    return qs.map((q: any) => {
+      if (q.imageUrl && q.imageUrl.startsWith('data:') && q.imageUrl.length > 30000) {
+        const { imageUrl: _unused, ...rest } = q;
+        return rest as CommunityQuestion;
+      }
+      return q;
+    });
+  });
 }
+
 
 export async function fetchQuestionsFromDB(): Promise<CommunityQuestion[]> {
   try {

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { ConceptItem, ConceptKeyPoint, ConceptQuickCheck, SubjectType, UserRole } from '../types';
 import { ChapterGroup, SubUnitItem, getCurriculumForSubject } from '../data/curriculumData';
+import { compressImageFile } from '../services/imageService';
 
 interface ConceptMasterViewProps {
   subject: SubjectType;
@@ -164,14 +165,11 @@ export const ConceptMasterView: React.FC<ConceptMasterViewProps> = ({
     setFormQuickChecks((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleDiagramFileRead = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        setFormDiagramImage(e.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleDiagramFileRead = async (file: File) => {
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setFormDiagramImage(compressed);
+    }
   };
 
   const handleSubmitNewConcept = (e: React.FormEvent) => {

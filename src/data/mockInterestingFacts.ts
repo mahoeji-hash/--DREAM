@@ -91,30 +91,26 @@ export const INITIAL_INTERESTING_FACTS: InterestingFactItem[] = [
   },
 ];
 
+import {
+  idbSet,
+  safeLocalStorageGet,
+  safeLocalStorageSet,
+} from '../services/storageService';
+
 const FACTS_STORAGE_KEY = 'puleo_dream_interesting_facts_v2';
 
 export const getStoredInterestingFacts = (): InterestingFactItem[] => {
-  try {
-    const raw = localStorage.getItem(FACTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(FACTS_STORAGE_KEY, JSON.stringify(INITIAL_INTERESTING_FACTS));
-      return INITIAL_INTERESTING_FACTS;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    return INITIAL_INTERESTING_FACTS;
-  } catch {
-    return INITIAL_INTERESTING_FACTS;
+  const parsed = safeLocalStorageGet<InterestingFactItem[]>(FACTS_STORAGE_KEY, []);
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed;
   }
+  return INITIAL_INTERESTING_FACTS;
 };
 
 export const saveStoredInterestingFacts = (facts: InterestingFactItem[]): void => {
-  try {
-    localStorage.setItem(FACTS_STORAGE_KEY, JSON.stringify(facts));
-  } catch (err) {
-    console.error('Failed to save interesting facts:', err);
-  }
+  if (!Array.isArray(facts)) return;
+  idbSet(FACTS_STORAGE_KEY, facts).catch(() => {});
+  safeLocalStorageSet(FACTS_STORAGE_KEY, facts);
 };
+
 

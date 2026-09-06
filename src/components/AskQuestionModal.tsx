@@ -20,6 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { SubjectType, GradeType, AIQuestionResult, ProblemItem, CommunityQuestion } from '../types';
 import { dbSaveQnaQuestion } from '../services/dbService';
+import { compressImageFile } from '../services/imageService';
 
 interface AskQuestionModalProps {
   initialProblem?: ProblemItem | null;
@@ -169,29 +170,27 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
     stopCamera();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setMimeType(file.type || 'image/jpeg');
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setImagePreview(compressed);
+    }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
 
     setMimeType(file.type || 'image/jpeg');
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImageFile(file);
+    if (compressed) {
+      setImagePreview(compressed);
+    }
   };
 
   const handleSubmitQuestion = async () => {
