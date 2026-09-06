@@ -27,7 +27,7 @@ import {
   dbSaveWrongAnswer,
 } from './services/dbService';
 import { isSupabaseConfigured, testSupabaseConnection } from './supabaseClient';
-import { cleanLegacyStorageKeys, safeLocalStorageSet } from './services/storageService';
+import { cleanLegacyStorageKeys, safeLocalStorageSet, safeLocalStorageGet } from './services/storageService';
 import { HomeScreen } from './components/HomeScreen';
 import { TextbookMasterView } from './components/TextbookMasterView';
 import { ProblemDetailModal } from './components/ProblemDetailModal';
@@ -53,13 +53,31 @@ const DEFAULT_PROFILE: UserProfile = {
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    const savedLogin = localStorage.getItem('puleo_is_logged_in');
-    return savedLogin === 'true';
+    const raw = localStorage.getItem('puleo_is_logged_in');
+    if (!raw) return false;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'boolean') return parsed;
+      if (parsed === 'true') return true;
+    } catch {
+      return raw === 'true';
+    }
+    return raw === 'true';
   });
 
-  const [currentView, setCurrentView] = useState<'home' | 'math' | 'science' | 'wrong-answers' | 'qna'>('home');
-  const [initialSubjectTab, setInitialSubjectTab] = useState<'problems' | 'concepts' | 'facts' | 'unit_tests'>('problems');
-  const [selectedProblem, setSelectedProblem] = useState<ProblemItem | null>(null);
+  const [currentView, setCurrentView] = useState<'home' | 'math' | 'science' | 'wrong-answers' | 'qna'>(() => {
+    const saved = safeLocalStorageGet<'home' | 'math' | 'science' | 'wrong-answers' | 'qna'>('puleo_current_view', 'home');
+    return saved || 'home';
+  });
+
+  const [initialSubjectTab, setInitialSubjectTab] = useState<'problems' | 'concepts' | 'facts' | 'unit_tests'>(() => {
+    const saved = safeLocalStorageGet<'problems' | 'concepts' | 'facts' | 'unit_tests'>('puleo_initial_subject_tab', 'problems');
+    return saved || 'problems';
+  });
+
+  const [selectedProblem, setSelectedProblem] = useState<ProblemItem | null>(() => {
+    return safeLocalStorageGet<ProblemItem | null>('puleo_selected_problem', null);
+  });
   const [isAskQuestionOpen, setIsAskQuestionOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [problemForAI, setProblemForAI] = useState<ProblemItem | null>(null);
@@ -151,8 +169,20 @@ export default function App() {
   }, [userProfile]);
 
   useEffect(() => {
-    safeLocalStorageSet('puleo_is_logged_in', isLoggedIn ? 'true' : 'false');
+    safeLocalStorageSet('puleo_is_logged_in', isLoggedIn);
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    safeLocalStorageSet('puleo_current_view', currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    safeLocalStorageSet('puleo_initial_subject_tab', initialSubjectTab);
+  }, [initialSubjectTab]);
+
+  useEffect(() => {
+    safeLocalStorageSet('puleo_selected_problem', selectedProblem);
+  }, [selectedProblem]);
 
   // Supabase 클라우드 데이터 실시간 동기화
   useEffect(() => {
@@ -291,13 +321,19 @@ export default function App() {
 
   const handleLoginSuccess = (profile: UserProfile) => {
     setUserProfile(profile);
+    safeLocalStorageSet('puleo_user_profile', profile);
+    safeLocalStorageSet('puleo_is_logged_in', true);
     setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    safeLocalStorageSet('puleo_is_logged_in', false);
+    safeLocalStorageSet('puleo_current_view', 'home');
+    safeLocalStorageSet('puleo_selected_problem', null);
     setIsProfileOpen(false);
     setCurrentView('home');
+    setSelectedProblem(null);
   };
 
   const handleToggleBookmark = (problemId: string) => {

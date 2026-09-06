@@ -299,14 +299,14 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                   {userProfile.schoolName || '대구화원고등학교'} 학습 Q&A
                 </span>
                 <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                  {userProfile.role === 'admin' ? '🛡️ 선생님 / 관리자 모드' : '🎒 학생 회원'}
+                  {userProfile.role === 'admin' ? '선생님 모드' : '학생'}
                 </span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-                <span>📚</span> 질문 & 선생님 맞춤 답변 게시판
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                질문 & 답변 게시판
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
-                화원고 학생들의 수학·과학 교과서 질문과 선생님의 정성 어린 단계별 친절 해설을 확인하세요.
+                화원고 학생들의 수학·과학 질문과 선생님 해설을 확인하세요.
               </p>
             </div>
           </div>
@@ -320,7 +320,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                 className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl text-xs sm:text-sm font-black shadow-md flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
-                <span>새 질문 작성하기</span>
+                <span>질문하기</span>
               </button>
             )}
           </div>

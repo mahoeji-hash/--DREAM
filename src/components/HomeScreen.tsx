@@ -64,10 +64,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="text-left">
               <span className="text-[11px] font-bold text-blue-600 tracking-wide uppercase block">
-                미래엔 공통수학 2 교과서 풀이
+                미래엔 공통수학 2
               </span>
               <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                수학 마스터 하기!
+                수학 마스터하기!
               </h2>
             </div>
           </div>
@@ -94,10 +94,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="text-left">
               <span className="text-[11px] font-bold text-emerald-600 tracking-wide uppercase block">
-                비상 통합과학 2 교과서 풀이
+                비상교육 통합과학 2
               </span>
               <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                과학 마스터 하기!
+                과학 마스터하기!
               </h2>
             </div>
           </div>
@@ -129,7 +129,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="text-left">
               <span className="text-[11px] font-bold text-rose-600 tracking-wide uppercase flex items-center gap-1">
-                <span>중단원&대단원 TEST 틀린 문제 복습</span>
+                <span>중단원 &amp; 대단원 TEST 틀린 문제 복습</span>
                 {wrongQuestionsCount > 0 && (
                   <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.2 rounded-md">
                     총 {wrongQuestionsCount}문제
@@ -144,7 +144,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </span>
                 ) : wrongQuestionsCount > 0 ? (
                   <span className="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-black rounded-full border border-emerald-200">
-                    전체 복습 완료 👍
+                    전체 복습 완료
                   </span>
                 ) : null}
               </h2>
@@ -185,17 +185,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 {userRole === 'admin' ? (
                   <>
                     <ShieldCheck className="w-3 h-3 text-amber-600" />
-                    <span>맞춤 답변 대기 ({waitingQuestionsCount}건)</span>
+                    <span>선생님 맞춤 답변 대기 ({waitingQuestionsCount}건)</span>
                   </>
                 ) : (
                   <>
                     <MessageSquare className="w-3 h-3 text-indigo-600" />
-                    <span>우리 학교 Q&A 모음</span>
+                    <span>우리 학교 Q&A 질문 게시판</span>
                   </>
                 )}
               </span>
               <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                <span>질문 & 답변</span>
+                <span>질문 &amp; 맞춤 답변</span>
                 {userRole === 'admin' && (
                   <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black rounded-full shadow-2xs">
                     답변 달기
@@ -212,24 +212,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </div>
 
       {/* 3. Clay Mascot Studying at Desk */}
-      <div id="mascot-study-section" className="w-full mt-1 flex flex-col items-center relative">
-        {/* Mascot Speech Bubble */}
-        <motion.div
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="relative px-4 py-1.5 bg-white/95 backdrop-blur-sm rounded-2xl border-2 border-amber-200 shadow-sm text-xs text-amber-950 font-bold max-w-xs text-center mb-2 z-10"
-        >
-          <p className="flex items-center justify-center gap-1">
-            <span>✨</span>
-            <span>
-              {userRole === 'admin'
-                ? '질문에 명쾌한 풀이를 남겨주세요 '
-                : '어려운 문제는 질문 게시판에 올려주세요!'}
-            </span>
-          </p>
-        </motion.div>
-
+      <div id="mascot-study-section" className="w-full mt-2 flex flex-col items-center relative">
         {/* Mascot Image Card */}
         <div className="w-32 sm:w-36 aspect-square rounded-3xl overflow-hidden border-4 border-white shadow-[0_12px_28px_rgba(0,0,0,0.1)] bg-amber-100/50 p-0.5 relative group">
           <img
@@ -238,15 +221,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="w-full h-full object-cover rounded-[20px] group-hover:scale-105 transition-transform duration-300"
             referrerPolicy="no-referrer"
           />
-          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-amber-400/90 text-[10px] font-black text-amber-950 shadow-xs backdrop-blur-xs flex items-center gap-0.5">
-            <span>💡</span>
-            <span>{userRole === 'admin' ? '채점 모드' : '열공 모드'}</span>
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-amber-400/90 text-[10px] font-black text-amber-950 shadow-xs backdrop-blur-xs">
+            {userRole === 'admin' ? '관리자 모드' : '학습 모드'}
           </div>
         </div>
-
-        {/* Bottom School Info */}
-        <p className="text-[11px] text-slate-400 font-medium mt-1.5">
-        </p>
       </div>
     </div>
   );

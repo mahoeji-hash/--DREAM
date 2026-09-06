@@ -209,14 +209,14 @@ export const WrongAnswersNoteView: React.FC<WrongAnswersNoteViewProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight text-slate-900">
-                    나만의 스마트 오답노트
+                    오답노트
                   </h1>
                   <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-black border border-rose-200">
-                    {userProfile.nickname} 님의 복습 보관함
+                    {userProfile.nickname}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">
-                  대단원 실전 TEST에서 틀렸던 모든 문항을 완벽히 마스터할 때까지 체계적으로 복습해요.
+                  TEST에서 틀린 문항을 다시 풀고 복습할 수 있습니다.
                 </p>
               </div>
             </div>
@@ -231,14 +231,14 @@ export const WrongAnswersNoteView: React.FC<WrongAnswersNoteViewProps> = ({
                   onClick={() => onNavigateToSubject('math', 'unit_tests')}
                   className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-black transition-all border border-blue-200"
                 >
-                  📐 수학 TEST
+                  수학 TEST
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigateToSubject('science', 'unit_tests')}
                   className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-black transition-all border border-emerald-200"
                 >
-                  🔬 과학 TEST
+                  과학 TEST
                 </button>
               </div>
             )}

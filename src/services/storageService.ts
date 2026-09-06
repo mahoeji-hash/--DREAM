@@ -88,14 +88,26 @@ export function cleanLegacyStorageKeys(): void {
 
   try {
     const currentKeysToKeep = new Set([
-      'puleo_dream_stored_problems_v8',
+      'puleo_dream_stored_problems_v9',
       'puleo_community_questions_v3',
-      'puleo_concepts_data_v1',
-      'puleo_dream_interesting_facts_v2',
+      'puleo_concepts_data_v2',
+      'puleo_dream_interesting_facts_v3',
+      'puleo_dream_unit_quizzes_v2',
       'puleo_dream_user_accounts_v3',
       'puleo_user_profile',
       'puleo_is_logged_in',
       'puleo_active_role',
+      'puleo_current_view',
+      'puleo_selected_problem',
+      'puleo_initial_subject_tab',
+      'puleo_math_active_tab',
+      'puleo_science_active_tab',
+      'puleo_math_selected_chapter_id',
+      'puleo_science_selected_chapter_id',
+      'puleo_math_selected_subunit_id',
+      'puleo_science_selected_subunit_id',
+      'puleo_math_selected_textbook_id',
+      'puleo_science_selected_textbook_id',
     ]);
 
     const keysToRemove: string[] = [];
@@ -103,11 +115,13 @@ export function cleanLegacyStorageKeys(): void {
       const k = localStorage.key(i);
       if (!k) continue;
 
-      // Identify obsolete versions of problems, questions, facts, or large cached items
+      // Identify obsolete versions of problems, questions, facts, quizzes, or large cached items
       if (
-        (k.startsWith('puleo_dream_stored_problems_') && k !== 'puleo_dream_stored_problems_v8') ||
+        (k.startsWith('puleo_dream_stored_problems_') && k !== 'puleo_dream_stored_problems_v9') ||
         (k.startsWith('puleo_community_questions_') && k !== 'puleo_community_questions_v3') ||
-        (k.startsWith('puleo_dream_interesting_facts_') && k !== 'puleo_dream_interesting_facts_v2') ||
+        (k.startsWith('puleo_dream_interesting_facts_') && k !== 'puleo_dream_interesting_facts_v3') ||
+        (k.startsWith('puleo_concepts_data_') && k !== 'puleo_concepts_data_v2') ||
+        (k.startsWith('puleo_dream_unit_quizzes_') && k !== 'puleo_dream_unit_quizzes_v2') ||
         (k.startsWith('puleo_') && !currentKeysToKeep.has(k) && (k.includes('_v') || k.includes('cache') || k.includes('draft')))
       ) {
         keysToRemove.push(k);

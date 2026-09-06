@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const DEFAULT_SUPABASE_URL = 'https://ewccyhbezzjffbkktpby.supabase.co';
-const DEFAULT_SUPABASE_KEY = 'sb_publishable_UjQ4-aGRNmX_k3lrMpxaNA_7hAhiEs0';
-
+// Read Supabase environment variables from Vite or Next.js prefix
 const envUrl = (
   import.meta.env.VITE_SUPABASE_URL ||
   import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -17,25 +15,24 @@ const envKey = (
   ''
 ).trim();
 
-const rawUrl = envUrl || DEFAULT_SUPABASE_URL;
-const rawKey = envKey || DEFAULT_SUPABASE_KEY;
-
-// Export active Supabase endpoint and credentials
-export const supabaseUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('http')) 
-  ? rawUrl 
-  : DEFAULT_SUPABASE_URL;
-
-export const supabaseAnonKey = (rawKey && typeof rawKey === 'string' && rawKey.length > 5) 
-  ? rawKey 
-  : DEFAULT_SUPABASE_KEY;
-
+// isSupabaseConfigured is true ONLY when explicit, valid environment variables are present
 export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  typeof supabaseUrl === 'string' &&
-  supabaseUrl.startsWith('http') &&
-  !supabaseUrl.includes('placeholder')
+  envUrl &&
+  envKey &&
+  typeof envUrl === 'string' &&
+  envUrl.startsWith('http') &&
+  !envUrl.includes('placeholder') &&
+  envKey.length > 8
 );
+
+// Fallback dummy credentials when not configured (prevents createClient from throwing at module load)
+export const supabaseUrl = isSupabaseConfigured 
+  ? envUrl 
+  : 'https://placeholder-project.supabase.co';
+
+export const supabaseAnonKey = isSupabaseConfigured 
+  ? envKey 
+  : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder_token';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -59,8 +56,8 @@ export interface SupabaseDiagnosticResult {
 }
 
 export async function testSupabaseConnection(): Promise<SupabaseDiagnosticResult> {
-  const masked = rawKey.length > 8 
-    ? `${rawKey.slice(0, 6)}...${rawKey.slice(-4)}` 
+  const masked = envKey.length > 8 
+    ? `${envKey.slice(0, 6)}...${envKey.slice(-4)}` 
     : '(키 없음)';
 
   if (!isSupabaseConfigured) {

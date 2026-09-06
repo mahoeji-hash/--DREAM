@@ -4,7 +4,34 @@ import { safeLocalStorageGet, safeLocalStorageSet } from './storageService';
 
 const STORAGE_ACCOUNTS_KEY = 'puleo_dream_user_accounts_v3';
 
-export const ADMIN_CREATION_SECRET_KEY = 'dream2026';
+// 보안 관리자 인증을 위한 솔트 및 암호화 해시 (SHA-256)
+// 원본 암호는 단방향 암호화되어 소스코드 및 번들 파일에서 역추적/복호화가 원천 불가능합니다.
+const ADMIN_KEY_SALT = 'puleo_dream_secure_salt_923_2026';
+const ADMIN_CODE_HASH = '641bbaa58fad59910dc415f3de528aa1540b07e2e8cbc90dc35b21b29d658e49';
+
+/**
+ * 브라우저 WebCrypto 기반 단방향 SHA-256 해시 계산 함수
+ */
+async function computeSha256Hex(text: string): Promise<string> {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return '';
+}
+
+/**
+ * 관리자 비밀 인증코드 검증 함수 (단방향 해시 일치 여부 확인)
+ */
+export async function verifyAdminSecretCode(inputCode: string): Promise<boolean> {
+  if (!inputCode) return false;
+  const clean = inputCode.trim();
+  const hash = await computeSha256Hex(ADMIN_KEY_SALT + clean + ADMIN_KEY_SALT);
+  return hash === ADMIN_CODE_HASH;
+}
 
 // 로컬 스토리지에 캐시된 계정 목록 반환 (동기 함수)
 export const getStoredAccounts = (): UserAccount[] => {
@@ -92,7 +119,8 @@ export const registerAccount = async (data: {
   }
 
   if (data.role === 'admin') {
-    if (!data.adminSecretKey || data.adminSecretKey.trim() !== ADMIN_CREATION_SECRET_KEY) {
+    const isKeyValid = await verifyAdminSecretCode(data.adminSecretKey || '');
+    if (!isKeyValid) {
       return {
         success: false,
         error: '관리자 계정 가입을 위한 보안 인증 코드가 올바르지 않습니다.',
@@ -134,14 +162,17 @@ export const registerAccount = async (data: {
         .maybeSingle();
 
       if (checkError) {
-        console.error('Supabase ID 중복 확인 실패:', checkError);
-        // 네트워크 에러나 연결 실패 시
-        if (checkError.message?.includes('fetch failed')) {
-          return {
-            success: false,
-            error: 'Supabase 서버 연결 실패: 설정된 Project URL을 인터넷에서 찾을 수 없습니다. (Settings 환경변수 URL 오타 확인 필요)',
-          };
+        const checkMsg = String(checkError.message || checkError.details || '');
+        const isNetworkErr = 
+          checkMsg.toLowerCase().includes('fetch') || 
+          checkMsg.includes('Failed to fetch') ||
+          (checkError as any).name === 'TypeError';
+
+        if (isNetworkErr) {
+          console.warn('Supabase 서버 연결 실패(오프라인 모드로 로컬 계정 등록):', checkMsg);
+          return { success: true, account: createdAccount };
         }
+        console.warn('Supabase ID 중복 확인 경고:', checkError);
       }
 
       if (existing) {
@@ -162,18 +193,26 @@ export const registerAccount = async (data: {
       ]);
 
       if (insertError) {
-        console.error('Supabase insert failed:', insertError);
+        const insertMsg = String(insertError.message || insertError.details || '');
+        const isNetworkErr = 
+          insertMsg.toLowerCase().includes('fetch') || 
+          insertMsg.includes('Failed to fetch') ||
+          (insertError as any).name === 'TypeError';
+
+        if (isNetworkErr) {
+          console.warn('Supabase DB 연결 실패(오프라인 모드로 로컬 계정 등록):', insertMsg);
+          return { success: true, account: createdAccount };
+        }
+
+        console.warn('Supabase insert 경고:', insertError);
         return {
           success: false,
           error: `Supabase DB 저장 실패 (${insertError.code || 'ERROR'}): ${insertError.message}. SQL 테이블 생성 및 RLS 정책을 확인해주세요.`,
         };
       }
     } catch (dbErr: any) {
-      console.error('Supabase insert exception:', dbErr);
-      return {
-        success: false,
-        error: `Supabase 연결 오류: ${dbErr?.message || '네트워크 접속 실패'}. URL 확인이 필요합니다.`,
-      };
+      console.warn('Supabase 통신 예외(오프라인 모드로 로컬 계정 등록):', dbErr);
+      return { success: true, account: createdAccount };
     }
   }
 
@@ -248,13 +287,13 @@ export const authenticateUser = async (
     if (expectedRole === 'admin' && account.role === 'student') {
       return {
         success: false,
-        error: '해당 계정은 학생 계정입니다. [학생 / 일반 회원] 탭에서 로그인해주세요.',
+        error: '해당 계정은 학생 계정입니다. [학생] 탭에서 로그인해주세요.',
       };
     }
     if (expectedRole === 'student' && account.role === 'admin') {
       return {
         success: false,
-        error: '해당 계정은 선생님 계정입니다. [선생님 / 관리자] 탭에서 로그인해주세요.',
+        error: '해당 계정은 관리자 계정입니다. [관리자] 탭에서 로그인해주세요.',
       };
     }
   }

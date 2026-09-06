@@ -51,7 +51,7 @@ export const UnitTestModal: React.FC<UnitTestModalProps> = ({
   const [showHint, setShowHint] = useState(false);
 
   // Active Countdown Timer (Admin Configured Minutes)
-  const initialSeconds = (quiz.estimatedMinutes ?? 10) * 60;
+  const initialSeconds = (quiz.estimatedMinutes ?? 20) * 60;
   const [secondsLeft, setSecondsLeft] = useState<number>(initialSeconds);
   const [isTimeUp, setIsTimeUp] = useState(false);
 
@@ -220,7 +220,7 @@ export const UnitTestModal: React.FC<UnitTestModalProps> = ({
     setAttachedPhotos({});
     setIsSubmitted(false);
     setIsTimeUp(false);
-    setSecondsLeft((quiz.estimatedMinutes ?? 10) * 60);
+    setSecondsLeft((quiz.estimatedMinutes ?? 20) * 60);
     setCurrentIndex(0);
     setShowHint(false);
   };

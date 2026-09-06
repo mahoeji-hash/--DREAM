@@ -38,7 +38,7 @@ export const TEXTBOOKS: TextbookInfo[] = [
 
 export const INITIAL_CURRICULUM_PROBLEMS: ProblemItem[] = [];
 
-const PROBLEMS_STORAGE_KEY = 'puleo_dream_stored_problems_v8';
+const PROBLEMS_STORAGE_KEY = 'puleo_dream_stored_problems_v9';
 
 // Helper to sanitize problems for localStorage when quota is tight
 function sanitizeProblemsForLocalStorage(problems: ProblemItem[]): ProblemItem[] {

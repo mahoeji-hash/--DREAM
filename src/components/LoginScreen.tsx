@@ -358,7 +358,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               }`}
             >
               <User className="w-3.5 h-3.5" />
-              <span>학생 / 일반 회원</span>
+              <span>학생</span>
             </button>
 
             <button
@@ -372,7 +372,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>선생님 / 관리자</span>
+              <span>관리자</span>
             </button>
           </div>
         </div>
@@ -500,7 +500,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       <span>관리자 회원가입 전용 보안 인증</span>
                     </div>
                     <p className="text-[11px] text-amber-700">
-                      관리자 계정 가입은 허가된 선생님/관리자 전용 비밀 인증코드가 있어야만 가능합니다.
+                      관리자 계정 가입은 허가된 관리자 전용 비밀 인증코드가 있어야만 가능합니다.
                     </p>
                   </div>
                 )}
@@ -603,7 +603,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-300/90 space-y-1.5">
                     <label className="text-xs font-black text-amber-900 flex items-center gap-1.5">
                       <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                      <span>선생님 / 관리자 전용 비밀 인증코드</span>
+                      <span>관리자 전용 비밀 인증코드</span>
                     </label>
                     <input
                       type="password"

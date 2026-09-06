@@ -1,53 +1,68 @@
-import { supabase } from '../supabaseClient';
+import { supabase, isSupabaseConfigured } from '../supabaseClient';
+
+// Helper to check if Supabase is active
+const isOnline = () => isSupabaseConfigured;
 
 // ==========================================
 // 1. 교과서 문제 (Textbook Problems) DB 연동
 // ==========================================
 
 export async function dbSaveTextbookProblem(problem: any) {
-  const { data, error } = await supabase.from('textbook_problems').insert([
-    {
-      textbook_id: problem.textbookId || '',
-      subject: problem.subject || '',
-      grade: problem.grade || '',
-      chapter: problem.chapter || '',
-      unit_number: problem.unitNumber || '',
-      unit_name: problem.unitName || '',
-      sub_unit_id: problem.subUnitId || '',
-      unit_code: problem.unitCode || '',
-      page_number: problem.pageNumber || 1,
-      problem_number: problem.problemNumber || '',
-      problem_type: problem.problemType || '',
-      difficulty: problem.difficulty || '보통',
-      problem_text: problem.problemText || '',
-      solution_steps: problem.solutionSteps || [],
-      final_answer: problem.finalAnswer || '',
-      core_concepts: problem.coreConcepts || [],
-      dream_tip: problem.dreamTip || '',
-      solution_image: problem.solutionImage || null,
-      views: problem.views || 1,
-      likes: problem.likes || 0,
-    },
-  ]).select();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data, error } = await supabase.from('textbook_problems').insert([
+      {
+        textbook_id: problem.textbookId || '',
+        subject: problem.subject || '',
+        grade: problem.grade || '',
+        chapter: problem.chapter || '',
+        unit_number: problem.unitNumber || '',
+        unit_name: problem.unitName || '',
+        sub_unit_id: problem.subUnitId || '',
+        unit_code: problem.unitCode || '',
+        page_number: problem.pageNumber || 1,
+        problem_number: problem.problemNumber || '',
+        problem_type: problem.problemType || '',
+        difficulty: problem.difficulty || '보통',
+        problem_text: problem.problemText || '',
+        solution_steps: problem.solutionSteps || [],
+        final_answer: problem.finalAnswer || '',
+        core_concepts: problem.coreConcepts || [],
+        dream_tip: problem.dreamTip || '',
+        solution_image: problem.solutionImage || null,
+        views: problem.views || 1,
+        likes: problem.likes || 0,
+      },
+    ]).select();
 
-  if (error) {
-    console.warn('교과서 문제 DB 저장 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('교과서 문제 DB 저장 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    console.warn('교과서 문제 DB 저장 통신 실패(로컬 유지):', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true, data };
 }
 
 export async function dbFetchTextbookProblems() {
-  const { data, error } = await supabase
-    .from('textbook_problems')
-    .select('*')
-    .order('id', { ascending: false });
+  if (!isOnline()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('textbook_problems')
+      .select('*')
+      .order('id', { ascending: false });
 
-  if (error) {
-    console.warn('교과서 문제 DB 불러오기 오류:', error);
+    if (error) {
+      console.warn('교과서 문제 DB 불러오기 경고:', error.message || error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('교과서 문제 DB 네트워크 오류:', err);
     return [];
   }
-  return data || [];
 }
 
 // ==========================================
@@ -166,53 +181,71 @@ export async function dbSaveTestQuestion(test: {
   questionImage?: string;
   explanationImage?: string;
 }) {
-  const { data, error } = await supabase.from('test_questions').insert([
-    {
-      client_id: test.clientId,
-      subject: test.subject,
-      unit_code: test.unitCode,
-      question_text: test.questionText,
-      options: test.options,
-      correct_answer: test.options[test.correctIndex] || '',
-      correct_index: test.correctIndex,
-      explanation: test.explanation,
-      hint: test.hint || null,
-      question_image: test.questionImage || null,
-      explanation_image: test.explanationImage || null,
-    },
-  ]).select();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data, error } = await supabase.from('test_questions').insert([
+      {
+        client_id: test.clientId,
+        subject: test.subject,
+        unit_code: test.unitCode,
+        question_text: test.questionText,
+        options: test.options,
+        correct_answer: test.options[test.correctIndex] || '',
+        correct_index: test.correctIndex,
+        explanation: test.explanation,
+        hint: test.hint || null,
+        question_image: test.questionImage || null,
+        explanation_image: test.explanationImage || null,
+      },
+    ]).select();
 
-  if (error) {
-    console.warn('단원평가 DB 저장 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('단원평가 DB 저장 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    console.warn('단원평가 DB 저장 통신 오류(로컬 유지):', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true, data };
 }
 
 export async function dbDeleteTestQuestion(clientId: string) {
-  const { error } = await supabase
-    .from('test_questions')
-    .delete()
-    .eq('client_id', clientId);
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { error } = await supabase
+      .from('test_questions')
+      .delete()
+      .eq('client_id', clientId);
 
-  if (error) {
-    console.warn('단원평가 문제 삭제 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('단원평가 문제 삭제 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('단원평가 문제 삭제 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true };
 }
 
 export async function dbFetchTestQuestions() {
-  const { data, error } = await supabase
-    .from('test_questions')
-    .select('*')
-    .order('id', { ascending: false });
+  if (!isOnline()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('test_questions')
+      .select('*')
+      .order('id', { ascending: false });
 
-  if (error) {
-    console.warn('단원평가 불러오기 오류:', error);
+    if (error) {
+      console.warn('단원평가 불러오기 경고:', error.message || error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('단원평가 불러오기 통신 오류:', err);
     return [];
   }
-  return data || [];
 }
 
 // ==========================================
@@ -564,26 +597,32 @@ export async function dbUpdateWrongAnswerReviewed(wrongId: string, isReviewed: b
 // ==========================================
 
 export async function dbSaveQuizAttempt(attempt: any) {
-  const { data, error } = await supabase.from('quiz_attempts').insert([
-    {
-      id: attempt.id || `attempt-${Date.now()}`,
-      user_id: attempt.userId,
-      quiz_id: attempt.quizId,
-      quiz_title: attempt.quizTitle,
-      unit_name: attempt.unitName,
-      subject: attempt.subject,
-      score: attempt.score,
-      total_questions: attempt.totalQuestions,
-      percentage: attempt.percentage,
-      completed_at: attempt.completedAt || new Date().toISOString(),
-    },
-  ]).select();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data, error } = await supabase.from('quiz_attempts').insert([
+      {
+        id: attempt.id || `attempt-${Date.now()}`,
+        user_id: attempt.userId,
+        quiz_id: attempt.quizId,
+        quiz_title: attempt.quizTitle,
+        unit_name: attempt.unitName,
+        subject: attempt.subject,
+        score: attempt.score,
+        total_questions: attempt.totalQuestions,
+        percentage: attempt.percentage,
+        completed_at: attempt.completedAt || new Date().toISOString(),
+      },
+    ]).select();
 
-  if (error) {
-    console.warn('퀴즈 응시 기록 저장 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('퀴즈 응시 기록 저장 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    console.warn('퀴즈 응시 기록 저장 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true, data };
 }
 
 // ==========================================
@@ -591,86 +630,110 @@ export async function dbSaveQuizAttempt(attempt: any) {
 // ==========================================
 
 export async function dbSaveConcept(concept: any) {
-  const { data, error } = await supabase.from('textbook_concepts').insert([
-    {
-      subject: concept.subject,
-      chapter: concept.chapterName || '',
-      chapter_id: concept.chapterId || '',
-      unit_name: concept.subUnitTitle || '',
-      sub_unit_id: concept.subUnitId || '',
-      sub_unit_title: concept.subUnitTitle || '',
-      title: concept.title,
-      summary: concept.summary || '',
-      badge: concept.badge || null,
-      key_points: concept.keyPoints || [],
-      key_formulas: concept.keyPoints || [],
-      formulas_and_reactions: concept.formulasAndReactions || [],
-      teacher_tips: concept.teacherTips || [],
-      quick_checks: concept.quickChecks || [],
-      diagram_image_url: concept.diagramImageUrl || null,
-      tags: concept.tags || [],
-      author_name: concept.authorName || '선생님',
-      likes: concept.likes || 0,
-      liked_user_ids: [],
-    },
-  ]).select();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data, error } = await supabase.from('textbook_concepts').insert([
+      {
+        subject: concept.subject,
+        chapter: concept.chapterName || '',
+        chapter_id: concept.chapterId || '',
+        unit_name: concept.subUnitTitle || '',
+        sub_unit_id: concept.subUnitId || '',
+        sub_unit_title: concept.subUnitTitle || '',
+        title: concept.title,
+        summary: concept.summary || '',
+        badge: concept.badge || null,
+        key_points: concept.keyPoints || [],
+        key_formulas: concept.keyPoints || [],
+        formulas_and_reactions: concept.formulasAndReactions || [],
+        teacher_tips: concept.teacherTips || [],
+        quick_checks: concept.quickChecks || [],
+        diagram_image_url: concept.diagramImageUrl || null,
+        tags: concept.tags || [],
+        author_name: concept.authorName || '선생님',
+        likes: concept.likes || 0,
+        liked_user_ids: [],
+      },
+    ]).select();
 
-  if (error) {
-    console.warn('핵심 개념 저장 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('핵심 개념 저장 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    console.warn('핵심 개념 저장 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true, data };
 }
 
 export async function dbFetchConcepts() {
-  const { data, error } = await supabase
-    .from('textbook_concepts')
-    .select('*')
-    .order('id', { ascending: false });
+  if (!isOnline()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('textbook_concepts')
+      .select('*')
+      .order('id', { ascending: false });
 
-  if (error) {
-    console.warn('핵심 개념 불러오기 오류:', error);
+    if (error) {
+      console.warn('핵심 개념 불러오기 경고:', error.message || error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('핵심 개념 불러오기 통신 오류:', err);
     return [];
   }
-  return data || [];
 }
 
 export async function dbDeleteConcept(conceptId: string) {
-  const { error } = await supabase
-    .from('textbook_concepts')
-    .delete()
-    .eq('id', conceptId);
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { error } = await supabase
+      .from('textbook_concepts')
+      .delete()
+      .eq('id', conceptId);
 
-  if (error) {
-    console.warn('핵심 개념 삭제 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('핵심 개념 삭제 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('핵심 개념 삭제 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true };
 }
 
 export async function dbToggleLikeConcept(conceptId: string, userId: string, isLiked: boolean) {
-  const { data: current } = await supabase
-    .from('textbook_concepts')
-    .select('likes, liked_user_ids')
-    .eq('id', conceptId)
-    .single();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data: current } = await supabase
+      .from('textbook_concepts')
+      .select('likes, liked_user_ids')
+      .eq('id', conceptId)
+      .single();
 
-  const currentLikedIds: string[] = current?.liked_user_ids || [];
-  const newLikedIds = isLiked
-    ? currentLikedIds.filter((id) => id !== userId)
-    : [...currentLikedIds, userId];
-  const newLikes = Math.max(0, (current?.likes || 0) + (isLiked ? -1 : 1));
+    const currentLikedIds: string[] = current?.liked_user_ids || [];
+    const newLikedIds = isLiked
+      ? currentLikedIds.filter((id) => id !== userId)
+      : [...currentLikedIds, userId];
+    const newLikes = Math.max(0, (current?.likes || 0) + (isLiked ? -1 : 1));
 
-  const { error } = await supabase
-    .from('textbook_concepts')
-    .update({ likes: newLikes, liked_user_ids: newLikedIds })
-    .eq('id', conceptId);
+    const { error } = await supabase
+      .from('textbook_concepts')
+      .update({ likes: newLikes, liked_user_ids: newLikedIds })
+      .eq('id', conceptId);
 
-  if (error) {
-    console.warn('개념 좋아요 업데이트 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('개념 좋아요 업데이트 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('개념 좋아요 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true };
 }
 
 // ==========================================
@@ -678,47 +741,59 @@ export async function dbToggleLikeConcept(conceptId: string, userId: string, isL
 // ==========================================
 
 export async function dbUpdateTextbookProblem(id: string | number, problem: any) {
-  const { data, error } = await supabase
-    .from('textbook_problems')
-    .update({
-      textbook_id: problem.textbookId,
-      subject: problem.subject,
-      grade: problem.grade,
-      chapter: problem.chapter,
-      unit_number: problem.unitNumber,
-      unit_name: problem.unitName,
-      sub_unit_id: problem.subUnitId,
-      unit_code: problem.unitCode,
-      page_number: problem.pageNumber,
-      problem_number: problem.problemNumber,
-      problem_type: problem.problemType,
-      difficulty: problem.difficulty,
-      problem_text: problem.problemText,
-      solution_steps: problem.solutionSteps || [],
-      final_answer: problem.finalAnswer,
-      core_concepts: problem.coreConcepts || [],
-      dream_tip: problem.dreamTip,
-      solution_image: problem.solutionImage || null,
-    })
-    .eq('id', id)
-    .select();
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { data, error } = await supabase
+      .from('textbook_problems')
+      .update({
+        textbook_id: problem.textbookId,
+        subject: problem.subject,
+        grade: problem.grade,
+        chapter: problem.chapter,
+        unit_number: problem.unitNumber,
+        unit_name: problem.unitName,
+        sub_unit_id: problem.subUnitId,
+        unit_code: problem.unitCode,
+        page_number: problem.pageNumber,
+        problem_number: problem.problemNumber,
+        problem_type: problem.problemType,
+        difficulty: problem.difficulty,
+        problem_text: problem.problemText,
+        solution_steps: problem.solutionSteps || [],
+        final_answer: problem.finalAnswer,
+        core_concepts: problem.coreConcepts || [],
+        dream_tip: problem.dreamTip,
+        solution_image: problem.solutionImage || null,
+      })
+      .eq('id', id)
+      .select();
 
-  if (error) {
-    console.warn('교과서 문제 수정 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('교과서 문제 수정 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    console.warn('교과서 문제 수정 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true, data };
 }
 
 export async function dbDeleteTextbookProblem(id: string | number) {
-  const { error } = await supabase
-    .from('textbook_problems')
-    .delete()
-    .eq('id', id);
+  if (!isOnline()) return { success: true, offline: true };
+  try {
+    const { error } = await supabase
+      .from('textbook_problems')
+      .delete()
+      .eq('id', id);
 
-  if (error) {
-    console.warn('교과서 문제 삭제 오류:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.warn('교과서 문제 삭제 경고:', error.message || error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('교과서 문제 삭제 통신 오류:', err?.message || err);
+    return { success: false, offline: true, error: err?.message };
   }
-  return { success: true };
 }

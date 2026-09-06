@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SubjectType, GradeType, TextbookInfo, ProblemItem, SolutionStep, UserRole, InterestingFactItem, QuizAttemptRecord, ConceptItem } from '../types';
-import { getStoredUnitQuizzes, saveStoredUnitQuizzes, UnitQuiz, QuizQuestion } from '../data/mockUnitTests';
+import { getStoredUnitQuizzes, saveStoredUnitQuizzes, saveStoredUnitQuizzesLocal, UnitQuiz, QuizQuestion } from '../data/mockUnitTests';
 import { getCurriculumForSubject, ChapterGroup, SubUnitItem } from '../data/curriculumData';
 import { UnitTestModal } from './UnitTestModal';
 import { dbSaveTestQuestion, dbFetchTestQuestions, dbDeleteTestQuestion } from '../services/dbService';
@@ -16,6 +16,7 @@ import { isSupabaseConfigured } from '../supabaseClient';
 import { InterestingFactsGallery } from './InterestingFactsGallery';
 import { ConceptMasterView } from './ConceptMasterView';
 import { compressImageFile } from '../services/imageService';
+import { safeLocalStorageGet, safeLocalStorageSet } from '../services/storageService';
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 
@@ -80,20 +81,45 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
   onToggleLikeConcept,
   onCompleteQuiz,
 }) => {
-  const [selectedTextbookId, setSelectedTextbookId] = useState<string | null>(null);
+  const [selectedTextbookId, setSelectedTextbookId] = useState<string | null>(() => {
+    return safeLocalStorageGet<string | null>(`puleo_${subject}_selected_textbook_id`, null);
+  });
   
   // Navigation & Dropdown Selection State
   const [isUnitSelectorOpen, setIsUnitSelectorOpen] = useState(false);
-  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
-  const [selectedSubUnitId, setSelectedSubUnitId] = useState<string | null>(null);
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(() => {
+    return safeLocalStorageGet<string | null>(`puleo_${subject}_selected_chapter_id`, null);
+  });
+  const [selectedSubUnitId, setSelectedSubUnitId] = useState<string | null>(() => {
+    return safeLocalStorageGet<string | null>(`puleo_${subject}_selected_subunit_id`, null);
+  });
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | '중단원 마무리' | '대단원 평가'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Active Tab: Problems vs Concepts vs Interesting Facts vs Unit Tests
   const [activeTab, setActiveTab] = useState<'problems' | 'concepts' | 'facts' | 'unit_tests'>(() => {
+    if (initialTab && initialTab !== 'problems') return initialTab;
+    const saved = safeLocalStorageGet<'problems' | 'concepts' | 'facts' | 'unit_tests' | null>(`puleo_${subject}_active_tab`, null);
+    if (saved) return saved;
     if (initialTab) return initialTab;
     return subject === 'science' ? 'concepts' : 'problems';
   });
+
+  useEffect(() => {
+    safeLocalStorageSet(`puleo_${subject}_selected_textbook_id`, selectedTextbookId);
+  }, [subject, selectedTextbookId]);
+
+  useEffect(() => {
+    safeLocalStorageSet(`puleo_${subject}_selected_chapter_id`, selectedChapterId);
+  }, [subject, selectedChapterId]);
+
+  useEffect(() => {
+    safeLocalStorageSet(`puleo_${subject}_selected_subunit_id`, selectedSubUnitId);
+  }, [subject, selectedSubUnitId]);
+
+  useEffect(() => {
+    safeLocalStorageSet(`puleo_${subject}_active_tab`, activeTab);
+  }, [subject, activeTab]);
 
   useEffect(() => {
     if (initialTab) {
@@ -141,6 +167,11 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
       setActiveTab('problems');
     }
   }, [subject, activeTab]);
+
+  // Persist quizzes state locally
+  useEffect(() => {
+    saveStoredUnitQuizzesLocal(allQuizzes);
+  }, [allQuizzes]);
   
   // Admin Quiz Management States
   const [showAddQuizModal, setShowAddQuizModal] = useState(false);
@@ -329,7 +360,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
         const updatedQuiz = {
           ...quiz,
           questions: updatedQuestions,
-          estimatedMinutes: Math.max(5, updatedQuestions.length * 3),
+          estimatedMinutes: quiz.estimatedMinutes ?? 20,
         };
         if (selectedQuizForManage && selectedQuizForManage.id === quiz.id) {
           setSelectedQuizForManage(updatedQuiz);
@@ -351,7 +382,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
       const targetQuiz = allQuizzes.find((q) => q.id === targetQuizIdForAdd);
       if (targetQuiz) {
         dbSaveTestQuestion({
-          clientId: newQuestion.id,
+          clientId: String(newQuestion.id),
           subject: targetQuiz.subject,
           unitCode: targetQuiz.unitCode,
           questionText: newQuestion.questionText,
@@ -362,7 +393,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
           questionImage: newQuestion.questionImage,
           explanationImage: newQuestion.explanationImage,
         }).then((result) => {
-          if (!result.success) console.error('TEST 문제 DB 저장 실패:', result.error);
+          if (!result.success) console.warn('TEST 문제 DB 저장 경고:', result.error);
         });
       }
     }
@@ -375,7 +406,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
         const updatedQuiz = {
           ...quiz,
           questions: updatedQuestions,
-          estimatedMinutes: Math.max(0, updatedQuestions.length * 3),
+          estimatedMinutes: quiz.estimatedMinutes ?? 20,
         };
         if (selectedQuizForManage && selectedQuizForManage.id === quiz.id) {
           setSelectedQuizForManage(updatedQuiz);
@@ -403,7 +434,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
 
   const handleOpenEditQuizTime = (quiz: UnitQuiz) => {
     setEditingQuizForTime(quiz);
-    setCustomQuizMinutes(quiz.estimatedMinutes ?? 10);
+    setCustomQuizMinutes(quiz.estimatedMinutes ?? 20);
     setShowEditQuizTimeModal(true);
   };
 
@@ -966,9 +997,6 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
           >
             <Lightbulb className={`w-4 h-4 shrink-0 ${activeTab === 'concepts' ? 'text-amber-500 fill-amber-400' : 'text-slate-500'}`} />
             <span className="tracking-tight whitespace-nowrap">핵심 개념 설명</span>
-            <span className="px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-[10px] font-black rounded-full shadow-2xs">
-              NEW
-            </span>
           </button>
         )}
 
@@ -999,10 +1027,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
           }`}
         >
           <Sparkles className={`w-4 h-4 shrink-0 ${activeTab === 'facts' ? 'text-amber-500 fill-amber-400' : 'text-slate-500'}`} />
-          <span className="tracking-tight whitespace-nowrap">4컷 만화 &amp; 포스터</span>
-          <span className="px-2 py-0.5 bg-gradient-to-r from-red-500 to-amber-500 text-white text-[10px] font-black rounded-full shadow-2xs">
-            HOT
-          </span>
+          <span className="tracking-tight whitespace-nowrap">4컷 만화 포스터</span>
         </button>
 
         <button
@@ -1067,12 +1092,12 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                 </span>
               </div>
               <h2 className="text-lg sm:text-xl font-black tracking-tight">
-                {subject === 'math' ? '미래엔 공통수학 2 교과서 마스터' : '비상교육 통합과학 2 교과서 마스터'}
+                {subject === 'math' ? '미래엔 공통수학 2' : '비상교육 통합과학 2'}
               </h2>
               <p className="text-xs text-blue-100 font-medium">
                 {subject === 'math'
-                  ? '도형의 방정식 · 집합과 명제 · 함수와 그래프 중단원 마무리 & 대단원 평가 풀이 수록'
-                  : '변화와 다양성 · 환경과 에너지 · 과학과 미래 사회 중단원 마무리 & 대단원 마무리 풀이 수록'}
+                  ? '도형의 방정식 · 집합과 명제 · 함수와 그래프 풀이'
+                  : '물질과 규칙성 · 시스템과 상호작용 · 변화와 다양성 풀이'}
               </p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/30 flex items-center justify-center text-3xl shadow-inner shrink-0 ml-2">
@@ -1081,16 +1106,16 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
           </div>
 
           {/* ========================================================== */}
-          {/* SMART SEARCH & UNIT SELECTOR DROPDOWN (돋보기 클릭 시 단원 선택지) */}
+          {/* SMART SEARCH & UNIT SELECTOR DROPDOWN */}
           {/* ========================================================== */}
           <div ref={selectorRef} className="relative z-30 space-y-2">
             <label className="text-xs font-black text-slate-700 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Search className="w-3.5 h-3.5 text-blue-600" />
-                <span>단원 및 문제 바로가기 (돋보기를 누르면 단원 선택지가 열립니다)</span>
+                <span>단원 및 문제 바로가기</span>
               </span>
               <span className="text-[11px] text-blue-600 font-bold">
-                클릭하여 단원/평가 선택
+                단원 선택
               </span>
             </label>
 
@@ -1456,7 +1481,13 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                 )}
                 <button
                   type="button"
-                  onClick={() => setSelectedQuiz(matchingQuizForSelection)}
+                  onClick={() => {
+                    if (matchingQuizForSelection.questions.length === 0) {
+                      alert('현재 등록된 문제가 없습니다. 선생님(관리자)이 문제를 출제한 후 응시할 수 있습니다.');
+                      return;
+                    }
+                    setSelectedQuiz(matchingQuizForSelection);
+                  }}
                   className="px-3 py-1.5 rounded-xl bg-white text-amber-900 text-xs font-black shadow-sm hover:bg-amber-50 active:scale-95 transition-all"
                 >
                   TEST 시작하기 →
@@ -1469,14 +1500,14 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
           <div className="space-y-3">
             {filteredProblems.length === 0 ? (
               <div className="p-10 text-center bg-white rounded-3xl border-2 border-dashed border-amber-200 space-y-3">
-                <span className="text-3xl block">🔍</span>
+                <span className="text-3xl block">📖</span>
                 <p className="text-sm font-bold text-slate-800">
-                  선택하신 단원의 등록된 교과서 문제가 없습니다.
+                  선택하신 단원에 등록된 문제가 없습니다.
                 </p>
                 {userRole === 'admin' ? (
                   <div className="space-y-2.5 max-w-md mx-auto">
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      선생님 권한으로 이 단원({activeSubUnitObj?.title || activeChapterObj?.fullName || '선택 단원'})에 여러 문제를 한 번에 등록하거나 연속으로 등록할 수 있습니다.
+                      선생님 권한으로 {activeSubUnitObj?.title || activeChapterObj?.fullName || '선택 단원'}에 새 문제를 등록할 수 있습니다.
                     </p>
                     <div className="flex items-center justify-center gap-2 flex-wrap">
                       <button
@@ -1485,7 +1516,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                         className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5"
                       >
                         <PlusCircle className="w-4 h-4" />
-                        <span>+ 단일 / 연속 문제 등록하기</span>
+                        <span>개별 문제 등록</span>
                       </button>
                       <button
                         type="button"
@@ -1493,13 +1524,13 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5"
                       >
                         <Layers className="w-4 h-4" />
-                        <span>⚡ 여러 문제 한 번에 일괄 등록</span>
+                        <span>일괄 등록</span>
                       </button>
                     </div>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                    다른 단원을 선택하시거나, 상단 돋보기 버튼을 눌러 원하는 중단원 마무리/대단원 평가 문제를 골라보세요!
+                    상단 단원 선택 버튼을 눌러 다른 단원의 문제를 확인해보세요.
                   </p>
                 )}
               </div>
@@ -1609,10 +1640,10 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                 {subject === 'math' ? '미래엔 공통수학 2' : '비상교육 통합과학 2'} 대단원 실전 TEST
               </span>
               <h3 className="text-base sm:text-lg font-black tracking-tight">
-                대단원(큰 단원)별 실전 TEST로 나의 실력을 점검하세요!
+                대단원 실전 TEST
               </h3>
               <p className="text-xs text-amber-100 font-medium">
-                작은 단원(소단원/중단원)을 통합한 큰 단원별 평가이며, 선생님(관리자)이 직접 문제를 출제·관리할 수 있습니다.
+                대단원별 문제를 풀고 실력을 점검해보세요.
               </p>
             </div>
             {userRole === 'admin' && (
@@ -1622,7 +1653,7 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                 className="px-4 py-2.5 bg-white text-amber-700 hover:bg-amber-50 rounded-2xl text-xs font-black shadow-md flex items-center gap-1.5 shrink-0 active:scale-95 transition-all"
               >
                 <PlusCircle className="w-4 h-4 text-amber-600" />
-                <span>+ 새 TEST 문제 출제</span>
+                <span>TEST 문제 출제</span>
               </button>
             )}
           </div>
@@ -1675,7 +1706,13 @@ export const TextbookMasterView: React.FC<TextbookMasterViewProps> = ({
                   {/* Start Test Button */}
                   <button
                     type="button"
-                    onClick={() => setSelectedQuiz(quiz)}
+                    onClick={() => {
+                      if (quiz.questions.length === 0) {
+                        alert('현재 등록된 문제가 없습니다. 선생님(관리자)이 문제를 출제한 후 응시할 수 있습니다.');
+                        return;
+                      }
+                      setSelectedQuiz(quiz);
+                    }}
                     className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                   >
                     <span>TEST 응시하기 ({quiz.questions.length}문항 · {quiz.estimatedMinutes === 0 ? '자유 풀이' : `${quiz.estimatedMinutes}분`})</span>

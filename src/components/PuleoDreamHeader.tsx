@@ -27,9 +27,8 @@ export const PuleoDreamHeader: React.FC<PuleoDreamHeaderProps> = ({
           <button
             id="btn-back-home"
             onClick={onGoHome}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/90 shadow-sm border border-amber-200/80 text-amber-900 text-sm font-bold hover:bg-amber-50 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 shadow-sm border border-amber-200/80 text-amber-900 text-xs font-bold hover:bg-amber-50 active:scale-95 transition-all"
           >
-            <span>🏠</span>
             <span>홈으로</span>
           </button>
         ) : (
@@ -38,10 +37,10 @@ export const PuleoDreamHeader: React.FC<PuleoDreamHeaderProps> = ({
             {userRole === 'admin' ? (
               <span className="font-bold text-amber-900 flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-amber-600" />
-                <span>관리자(선생님) 모드</span>
+                <span>선생님 모드</span>
               </span>
             ) : (
-              <span>실시간 우리 반 학습 중</span>
+              <span>화원고 1학년</span>
             )}
           </div>
         )}
@@ -136,7 +135,7 @@ export const PuleoDreamHeader: React.FC<PuleoDreamHeaderProps> = ({
           <div className="mt-2 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-blue-50/90 border border-blue-200/60 shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
             <p className="text-[11px] sm:text-xs text-blue-900 font-bold tracking-tight">
-              수학 · 과학 교과서 풀이 & 맞춤 질문 해결소
+              수학 · 과학 교과서 풀이 & 질문 게시판
             </p>
           </div>
         </div>

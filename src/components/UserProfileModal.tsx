@@ -174,7 +174,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   {userProfile.role === 'admin' ? (
                     <>
                       <ShieldCheck className="w-3 h-3" />
-                      <span>선생님 / 관리자</span>
+                      <span>관리자</span>
                     </>
                   ) : (
                     <>
@@ -848,7 +848,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-800 block">
-                      현재 접속 권한: {userProfile.role === 'admin' ? '👨‍🏫 관리자' : ' 🎒 학생 / 일반 회원'}
+                      현재 접속 권한: {userProfile.role === 'admin' ? '👨‍🏫 관리자' : ' 🎒 학생'}
                     </span>
                     <span className="text-[11px] text-slate-500">
                       로그아웃하고 다른 계정으로 로그인할 수 있습니다.
