@@ -1,23 +1,40 @@
 import { createClient } from '@supabase/supabase-js';
 
-const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+const DEFAULT_SUPABASE_URL = 'https://ewccyhbezzjffbkktpby.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_UjQ4-aGRNmX_k3lrMpxaNA_7hAhiEs0';
 
-// Provide a valid dummy endpoint if environment variables are not yet provided
+const envUrl = (
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
+  ''
+).trim();
+
+const envKey = (
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  ''
+).trim();
+
+const rawUrl = envUrl || DEFAULT_SUPABASE_URL;
+const rawKey = envKey || DEFAULT_SUPABASE_KEY;
+
+// Export active Supabase endpoint and credentials
 export const supabaseUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('http')) 
   ? rawUrl 
-  : 'https://placeholder-project.supabase.co';
+  : DEFAULT_SUPABASE_URL;
 
-export const supabaseAnonKey = (rawKey && typeof rawKey === 'string' && rawKey.length > 10) 
+export const supabaseAnonKey = (rawKey && typeof rawKey === 'string' && rawKey.length > 5) 
   ? rawKey 
-  : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder_token';
+  : DEFAULT_SUPABASE_KEY;
 
 export const isSupabaseConfigured = Boolean(
-  rawUrl &&
-  rawKey &&
-  typeof rawUrl === 'string' &&
-  rawUrl.startsWith('http') &&
-  !rawUrl.includes('placeholder')
+  supabaseUrl &&
+  supabaseAnonKey &&
+  typeof supabaseUrl === 'string' &&
+  supabaseUrl.startsWith('http') &&
+  !supabaseUrl.includes('placeholder')
 );
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
