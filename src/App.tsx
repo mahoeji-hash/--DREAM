@@ -20,6 +20,7 @@ import {
   dbDeleteInterestingFact,
   dbToggleLikeInterestingFact,
   dbSaveConcept,
+  dbFetchConcepts,
   dbDeleteConcept,
   dbToggleLikeConcept,
   dbSaveQuizAttempt,
@@ -248,6 +249,33 @@ export default function App() {
             createdAt: f.created_at,
           }));
           setInterestingFacts(mapped);
+        }
+
+        // 5. 핵심 개념 동기화
+        const cloudConcepts = await dbFetchConcepts();
+        if (isMounted && Array.isArray(cloudConcepts) && cloudConcepts.length > 0) {
+          const mapped: ConceptItem[] = cloudConcepts.map((c: any) => ({
+            id: String(c.id),
+            subject: c.subject,
+            chapterId: c.chapter_id || '',
+            chapterName: c.chapter || '',
+            subUnitId: c.sub_unit_id || '',
+            subUnitTitle: c.sub_unit_title || c.unit_name || '',
+            title: c.title,
+            summary: c.summary || '',
+            badge: c.badge || undefined,
+            keyPoints: c.key_points || [],
+            formulasAndReactions: c.formulas_and_reactions || undefined,
+            teacherTips: c.teacher_tips || undefined,
+            quickChecks: c.quick_checks || undefined,
+            diagramImageUrl: c.diagram_image_url || undefined,
+            tags: c.tags || [],
+            authorName: c.author_name || '선생님',
+            createdAt: c.created_at ? String(c.created_at).split('T')[0] : '',
+            likes: c.likes || 0,
+            likedUserIds: c.liked_user_ids || [],
+          }));
+          setConcepts(mapped);
         }
       } catch (err) {
         console.warn('Initial cloud sync error:', err);
