@@ -563,3 +563,132 @@ export async function dbSaveQuizAttempt(attempt: any) {
   }
   return { success: true, data };
 }
+
+// ==========================================
+// 10. 핵심 개념 (Textbook Concepts) DB 연동
+// ==========================================
+
+export async function dbSaveConcept(concept: any) {
+  const { data, error } = await supabase.from('textbook_concepts').insert([
+    {
+      subject: concept.subject,
+      grade: concept.grade || 'high_1',
+      chapter: concept.chapter,
+      unit_name: concept.unitName,
+      unit_code: concept.unitCode || null,
+      title: concept.title,
+      summary: concept.summary,
+      key_formulas: concept.keyFormulas || [],
+      common_mistakes: concept.commonMistakes || null,
+      likes: 0,
+      liked_user_ids: [],
+    },
+  ]).select();
+
+  if (error) {
+    console.warn('핵심 개념 저장 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, data };
+}
+
+export async function dbFetchConcepts() {
+  const { data, error } = await supabase
+    .from('textbook_concepts')
+    .select('*')
+    .order('id', { ascending: false });
+
+  if (error) {
+    console.warn('핵심 개념 불러오기 오류:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function dbDeleteConcept(conceptId: string) {
+  const { error } = await supabase
+    .from('textbook_concepts')
+    .delete()
+    .eq('id', conceptId);
+
+  if (error) {
+    console.warn('핵심 개념 삭제 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+export async function dbToggleLikeConcept(conceptId: string, userId: string, isLiked: boolean) {
+  const { data: current } = await supabase
+    .from('textbook_concepts')
+    .select('likes, liked_user_ids')
+    .eq('id', conceptId)
+    .single();
+
+  const currentLikedIds: string[] = current?.liked_user_ids || [];
+  const newLikedIds = isLiked
+    ? currentLikedIds.filter((id) => id !== userId)
+    : [...currentLikedIds, userId];
+  const newLikes = Math.max(0, (current?.likes || 0) + (isLiked ? -1 : 1));
+
+  const { error } = await supabase
+    .from('textbook_concepts')
+    .update({ likes: newLikes, liked_user_ids: newLikedIds })
+    .eq('id', conceptId);
+
+  if (error) {
+    console.warn('개념 좋아요 업데이트 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+// ==========================================
+// 11. 교과서 문제 (Textbook Problems) 수정/삭제 DB 연동
+// ==========================================
+
+export async function dbUpdateTextbookProblem(id: string | number, problem: any) {
+  const { data, error } = await supabase
+    .from('textbook_problems')
+    .update({
+      textbook_id: problem.textbookId,
+      subject: problem.subject,
+      grade: problem.grade,
+      chapter: problem.chapter,
+      unit_number: problem.unitNumber,
+      unit_name: problem.unitName,
+      sub_unit_id: problem.subUnitId,
+      unit_code: problem.unitCode,
+      page_number: problem.pageNumber,
+      problem_number: problem.problemNumber,
+      problem_type: problem.problemType,
+      difficulty: problem.difficulty,
+      problem_text: problem.problemText,
+      solution_steps: problem.solutionSteps || [],
+      final_answer: problem.finalAnswer,
+      core_concepts: problem.coreConcepts || [],
+      dream_tip: problem.dreamTip,
+      solution_image: problem.solutionImage || null,
+    })
+    .eq('id', id)
+    .select();
+
+  if (error) {
+    console.warn('교과서 문제 수정 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, data };
+}
+
+export async function dbDeleteTextbookProblem(id: string | number) {
+  const { error } = await supabase
+    .from('textbook_problems')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.warn('교과서 문제 삭제 오류:', error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}

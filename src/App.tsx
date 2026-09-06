@@ -6,7 +6,24 @@ import { getStoredInterestingFacts, saveStoredInterestingFacts } from './data/mo
 import { getStoredConcepts, saveStoredConcepts } from './data/mockConcepts';
 import { ProblemItem, TextbookInfo, UserProfile, AIQuestionResult, CommunityQuestion, TeacherAnswer, InterestingFactItem, QuizAttemptRecord, ConceptItem } from './types';
 import { getStoredAccounts, fetchStoredAccountsFromDB } from './services/authService';
-import { dbFetchCommunityQuestions, dbFetchTextbookProblems, dbFetchInterestingFacts } from './services/dbService';
+import {
+  dbFetchCommunityQuestions,
+  dbFetchTextbookProblems,
+  dbFetchInterestingFacts,
+  dbSaveCommunityQuestion,
+  dbAnswerCommunityQuestion,
+  dbDeleteCommunityQuestion,
+  dbSaveTextbookProblem,
+  dbUpdateTextbookProblem,
+  dbDeleteTextbookProblem,
+  dbSaveInterestingFact,
+  dbDeleteInterestingFact,
+  dbToggleLikeInterestingFact,
+  dbSaveConcept,
+  dbDeleteConcept,
+  dbToggleLikeConcept,
+  dbSaveQuizAttempt,
+} from './services/dbService';
 import { isSupabaseConfigured, testSupabaseConnection } from './supabaseClient';
 import { cleanLegacyStorageKeys, safeLocalStorageSet } from './services/storageService';
 import { HomeScreen } from './components/HomeScreen';
@@ -303,6 +320,25 @@ export default function App() {
         wrongQuizQuestions: updatedWrong,
       };
     });
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      const activeUserId = userProfile.id || userProfile.loginId || 'user_account_default';
+      dbSaveQuizAttempt({
+        id: (attempt as any).id,
+        userId: activeUserId,
+        quizId: attempt.quizId,
+        quizTitle: (attempt as any).quizTitle,
+        unitName: (attempt as any).unitName,
+        subject: (attempt as any).subject,
+        score: (attempt as any).score,
+        totalQuestions: (attempt as any).totalQuestions,
+        percentage: (attempt as any).percentage,
+        completedAt: (attempt as any).completedAt,
+      }).then((result) => {
+        if (!result.success) console.error('퀴즈 기록 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleAddNewProblem = (newProb: ProblemItem, autoOpen = false) => {
@@ -310,17 +346,40 @@ export default function App() {
     if (autoOpen) {
       setSelectedProblem(newProb);
     }
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbSaveTextbookProblem(newProb).then((result) => {
+        if (!result.success) console.error('문제 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleAddNewProblems = (newProbs: ProblemItem[]) => {
     if (!newProbs || newProbs.length === 0) return;
     setProblems((prev) => [...newProbs, ...prev]);
+
+    // Supabase 클라우드 DB 저장 (다건)
+    if (isSupabaseConfigured) {
+      newProbs.forEach((p) => {
+        dbSaveTextbookProblem(p).then((result) => {
+          if (!result.success) console.error('문제 DB 저장 실패:', result.error);
+        });
+      });
+    }
   };
 
   const handleDeleteProblem = (problemId: string) => {
     setProblems((prev) => prev.filter((p) => p.id !== problemId));
     if (selectedProblem?.id === problemId) {
       setSelectedProblem(null);
+    }
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteTextbookProblem(problemId).then((result) => {
+        if (!result.success) console.error('문제 DB 삭제 실패:', result.error);
+      });
     }
   };
 
@@ -331,24 +390,48 @@ export default function App() {
     if (selectedProblem?.id === updatedProblem.id) {
       setSelectedProblem(updatedProblem);
     }
+
+    // Supabase 클라우드 DB 수정
+    if (isSupabaseConfigured) {
+      dbUpdateTextbookProblem(updatedProblem.id, updatedProblem).then((result) => {
+        if (!result.success) console.error('문제 DB 수정 실패:', result.error);
+      });
+    }
   };
 
   // Interesting Facts Handlers (Admin creates/deletes, 1 like per user account)
   const handleAddNewFact = (newFact: InterestingFactItem) => {
     setInterestingFacts((prev) => [newFact, ...prev]);
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbSaveInterestingFact(newFact).then((result) => {
+        if (!result.success) console.error('포스터 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleDeleteFact = (factId: string) => {
     setInterestingFacts((prev) => prev.filter((f) => f.id !== factId));
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteInterestingFact(factId).then((result) => {
+        if (!result.success) console.error('포스터 DB 삭제 실패:', result.error);
+      });
+    }
   };
 
   const handleToggleLikeFact = (factId: string) => {
     const activeUserId = userProfile.id || userProfile.loginId || 'user_account_default';
+    let wasLiked = false;
+
     setInterestingFacts((prev) =>
       prev.map((f) => {
         if (f.id !== factId) return f;
         const currentLikedUsers = Array.isArray(f.likedUserIds) ? f.likedUserIds : [];
         const isAlreadyLiked = currentLikedUsers.includes(activeUserId);
+        wasLiked = isAlreadyLiked;
 
         if (isAlreadyLiked) {
           // Unlike (1 like per account toggle off)
@@ -368,24 +451,48 @@ export default function App() {
         }
       })
     );
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbToggleLikeInterestingFact(factId, activeUserId, wasLiked).then((result) => {
+        if (!result.success) console.error('포스터 좋아요 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   // Concept Notes Handlers (Admin creates/deletes, 1 like per user account)
   const handleAddNewConcept = (newConcept: ConceptItem) => {
     setConcepts((prev) => [newConcept, ...prev]);
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbSaveConcept(newConcept).then((result) => {
+        if (!result.success) console.error('개념 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleDeleteConcept = (conceptId: string) => {
     setConcepts((prev) => prev.filter((c) => c.id !== conceptId));
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteConcept(conceptId).then((result) => {
+        if (!result.success) console.error('개념 DB 삭제 실패:', result.error);
+      });
+    }
   };
 
   const handleToggleLikeConcept = (conceptId: string) => {
     const activeUserId = userProfile.id || userProfile.loginId || 'user_account_default';
+    let wasLiked = false;
+
     setConcepts((prev) =>
       prev.map((c) => {
         if (c.id !== conceptId) return c;
         const currentLikedUsers = Array.isArray(c.likedUserIds) ? c.likedUserIds : [];
         const isAlreadyLiked = currentLikedUsers.includes(activeUserId);
+        wasLiked = isAlreadyLiked;
 
         if (isAlreadyLiked) {
           const updatedUsers = currentLikedUsers.filter((uid) => uid !== activeUserId);
@@ -403,11 +510,25 @@ export default function App() {
         }
       })
     );
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbToggleLikeConcept(conceptId, activeUserId, wasLiked).then((result) => {
+        if (!result.success) console.error('개념 좋아요 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   // Community Questions Handlers
   const handleAddCommunityQuestion = (newQ: CommunityQuestion) => {
     setCommunityQuestions((prev) => [newQ, ...prev]);
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbSaveCommunityQuestion(newQ).then((result) => {
+        if (!result.success) console.error('커뮤니티 질문 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleAnswerCommunityQuestion = (questionId: string, answer: TeacherAnswer) => {
@@ -422,10 +543,24 @@ export default function App() {
           : q
       )
     );
+
+    // Supabase 클라우드 DB 저장
+    if (isSupabaseConfigured) {
+      dbAnswerCommunityQuestion(questionId, answer).then((result) => {
+        if (!result.success) console.error('선생님 답변 DB 저장 실패:', result.error);
+      });
+    }
   };
 
   const handleDeleteCommunityQuestion = (questionId: string) => {
     setCommunityQuestions((prev) => prev.filter((q) => q.id !== questionId));
+
+    // Supabase 클라우드 DB 삭제
+    if (isSupabaseConfigured) {
+      dbDeleteCommunityQuestion(questionId).then((result) => {
+        if (!result.success) console.error('커뮤니티 질문 DB 삭제 실패:', result.error);
+      });
+    }
   };
 
   const handleAskAIAboutSpecificProblem = (problem: ProblemItem) => {
@@ -648,4 +783,3 @@ export default function App() {
     </div>
   );
 }
-
