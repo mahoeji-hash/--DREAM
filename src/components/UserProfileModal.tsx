@@ -901,7 +901,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-amber-50/70 border-t border-amber-200 flex items-center justify-between">
+        <div className="p-3 bg-amber-50/70 border-t border-amber-200 flex items-center justify-end">
           <button
             onClick={() => {
               onClose();
@@ -911,13 +911,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>계정 전환 / 로그아웃</span>
-          </button>
-
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-xl hover:bg-slate-900"
-          >
-            닫기
           </button>
         </div>
       </motion.div>

@@ -48,6 +48,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [signupSchool, setSignupSchool] = useState('대구화원고등학교');
   const [signupGrade, setSignupGrade] = useState<GradeType>('high_1');
   const [adminSecretKey, setAdminSecretKey] = useState('');
+  const [showAdminSecretKey, setShowAdminSecretKey] = useState(false);
 
   // Status feedback
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -605,17 +606,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       <KeyRound className="w-3.5 h-3.5 text-amber-600" />
                       <span>관리자 전용 비밀 인증코드</span>
                     </label>
-                    <input
-                      type="password"
-                      required
-                      disabled={isLoading}
-                      value={adminSecretKey}
-                      onChange={(e) => setAdminSecretKey(e.target.value)}
-                      placeholder="발급받은 관리자 비밀 인증코드를 입력하세요"
-                      className="w-full px-3 py-2 bg-white rounded-xl border-2 border-amber-400 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAdminSecretKey ? 'text' : 'password'}
+                        required
+                        disabled={isLoading}
+                        value={adminSecretKey}
+                        onChange={(e) => setAdminSecretKey(e.target.value)}
+                        placeholder="발급받은 관리자 비밀 인증코드를 입력하세요"
+                        className="w-full px-3 py-2 pr-9 bg-white rounded-xl border-2 border-amber-400 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminSecretKey(!showAdminSecretKey)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-600 focus:outline-none"
+                        tabIndex={-1}
+                      >
+                        {showAdminSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                     <p className="text-[10px] text-amber-800/80 font-medium">
-                      * 관리자 가입은 학교 관리자 또는 담당 교사에게 전달된 전용 보안 코드가 필요합니다.
+                      * 관리자 가입은 전용 보안 암호화 코드가 필요하며, 인가되지 않은 가입은 엄격히 차단됩니다.
                     </p>
                   </div>
                 )}

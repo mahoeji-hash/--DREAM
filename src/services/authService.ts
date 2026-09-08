@@ -5,9 +5,9 @@ import { safeLocalStorageGet, safeLocalStorageSet } from './storageService';
 const STORAGE_ACCOUNTS_KEY = 'puleo_dream_user_accounts_v3';
 
 // 보안 관리자 인증을 위한 솔트 및 암호화 해시 (SHA-256)
-// 원본 암호는 단방향 암호화되어 소스코드 및 번들 파일에서 역추적/복호화가 원천 불가능합니다.
-const ADMIN_KEY_SALT = 'puleo_dream_secure_salt_923_2026';
-const ADMIN_CODE_HASH = '641bbaa58fad59910dc415f3de528aa1540b07e2e8cbc90dc35b21b29d658e49';
+// 원본 암호는 단방향 솔트 암호화되어 소스코드 및 번들 파일에서 복호화/추적이 원천 불가능합니다.
+const ADMIN_KEY_SALT = 'puleo_hwawon_super_admin_salt_923_2026';
+const ADMIN_CODE_HASH = 'd2dbb63fe099012c082170a2c622690b081ff2b4c307cd75fa8320b3f1f2c523';
 
 /**
  * 브라우저 WebCrypto 기반 단방향 SHA-256 해시 계산 함수

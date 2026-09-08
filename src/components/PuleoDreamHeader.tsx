@@ -75,9 +75,6 @@ export const PuleoDreamHeader: React.FC<PuleoDreamHeaderProps> = ({
             <span className="text-xs font-black hidden sm:inline">
               {userRole === 'admin' ? '관리자' : '내정보'}
             </span>
-            <span className={`absolute -top-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${
-              userRole === 'admin' ? 'bg-orange-500' : 'bg-amber-400'
-            }`}></span>
           </button>
         </div>
       </div>
