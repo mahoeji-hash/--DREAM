@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { SubjectType, GradeType, AIQuestionResult, ProblemItem, CommunityQuestion } from '../types';
 import { dbSaveQnaQuestion } from '../services/dbService';
 import { compressImageFile } from '../services/imageService';
+import { generateUuid } from '../supabaseClient';
 
 interface AskQuestionModalProps {
   initialProblem?: ProblemItem | null;
@@ -773,18 +774,8 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
                       const contentStr = result.extractedProblemText || result.summary;
                       const imageStr = result.userImage || '';
 
-                      // 1. Supabase DB 영구 저장
-                      await dbSaveQnaQuestion({
-                        userName: authorName,
-                        title: titleStr,
-                        content: contentStr,
-                        subject: subject,
-                        imageUrl: imageStr,
-                      });
-
-                      // 2. 화면 상태 및 리액트 콜백 전달
                       const newCommQ: CommunityQuestion = {
-                        id: `q-${Date.now()}`,
+                        id: generateUuid(),
                         authorId: userProfile?.id || 'student-1',
                         authorName: authorName,
                         authorRole: userProfile?.role || 'student',
@@ -794,7 +785,7 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
                         textbookRef: `${subject === 'math' ? '수학' : '과학'} 교과서 질문`,
                         title: titleStr,
                         content: contentStr,
-                        imageUrl: imageStr,
+                        imageUrl: imageStr || undefined,
                         createdAt: new Date().toLocaleDateString('ko-KR', {
                           month: 'numeric',
                           day: 'numeric',
@@ -802,11 +793,21 @@ export const AskQuestionModal: React.FC<AskQuestionModalProps> = ({
                           minute: '2-digit',
                         }),
                         status: 'waiting',
-                        likes: 1,
+                        likes: 0,
                       };
 
                       if (onPostToCommunity) {
                         onPostToCommunity(newCommQ);
+                      } else {
+                        await dbSaveQnaQuestion({
+                          userName: authorName,
+                          title: titleStr,
+                          content: contentStr,
+                          subject: subject,
+                          imageUrl: imageStr,
+                          authorId: userProfile?.id,
+                          school: userProfile?.schoolName,
+                        });
                       }
                       setHasPostedToCommunity(true);
                     }}

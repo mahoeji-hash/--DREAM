@@ -73,17 +73,19 @@ export interface ProblemItem {
   problemNumber: string;
   problemType: '개념 예제' | '확인 문제' | '중단원 마무리' | '발전/심화 문제' | '실험 탐구';
   difficulty: '쉬움' | '보통' | '도전' | '심화';
-  problemText: string;
+  problemText?: string;
+  problemImage?: string;
+  solutionImage?: string;
+  videoUrl?: string;
   diagramSvgType?: 'graph_parabola' | 'triangle_geometry' | 'chemical_reaction' | 'physics_pulley' | 'biology_cell' | 'linear_function' | 'cube_volume';
   diagramLabel?: string;
   graphExplanation?: GraphExplanation;
-  solutionSteps: SolutionStep[];
+  solutionSteps?: SolutionStep[];
   finalAnswer: string;
-  coreConcepts: string[];
-  dreamTip: string;
-  solutionImage?: string;
-  peerTips: PeerTip[];
-  studentSolutions: StudentSolution[];
+  coreConcepts?: string[];
+  dreamTip?: string;
+  peerTips?: PeerTip[];
+  studentSolutions?: StudentSolution[];
   views: number;
   likes: number;
 }
@@ -176,6 +178,7 @@ export interface TeacherAnswer {
   answeredAt: string;
   answerText: string;
   imageUrl?: string;
+  videoUrl?: string; // 인강 / 동영상 강의 URL (YouTube 등)
   keyFormula?: string;
   solutionSteps?: SolutionStep[];
   teacherTip?: string;

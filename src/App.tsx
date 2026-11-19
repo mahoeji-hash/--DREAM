@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useModalHistory } from './utils/navigationHistory';
 import { TEXTBOOKS, getStoredProblems, saveStoredProblems, hydrateProblemsFromIndexedDB } from './data/mockTextbooks';
 import { getStoredQuestions, saveStoredQuestions } from './data/mockCommunityQuestions';
 import { getStoredInterestingFacts, saveStoredInterestingFacts } from './data/mockInterestingFacts';
@@ -9,20 +10,13 @@ import { getStoredAccounts, fetchStoredAccountsFromDB } from './services/authSer
 import {
   dbFetchCommunityQuestions,
   dbFetchTextbookProblems,
-  dbFetchInterestingFacts,
   dbSaveCommunityQuestion,
   dbAnswerCommunityQuestion,
   dbDeleteCommunityQuestion,
+  dbToggleLikeCommunityQuestion,
   dbSaveTextbookProblem,
   dbUpdateTextbookProblem,
   dbDeleteTextbookProblem,
-  dbSaveInterestingFact,
-  dbDeleteInterestingFact,
-  dbToggleLikeInterestingFact,
-  dbSaveConcept,
-  dbFetchConcepts,
-  dbDeleteConcept,
-  dbToggleLikeConcept,
   dbSaveQuizAttempt,
   dbSaveWrongAnswer,
 } from './services/dbService';
@@ -34,7 +28,6 @@ import { ProblemDetailModal } from './components/ProblemDetailModal';
 import { AskQuestionModal } from './components/AskQuestionModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { CommunityQnAView } from './components/CommunityQnAView';
-import { WrongAnswersNoteView } from './components/WrongAnswersNoteView';
 import { LoginScreen } from './components/LoginScreen';
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -65,15 +58,13 @@ export default function App() {
     return raw === 'true';
   });
 
-  const [currentView, setCurrentView] = useState<'home' | 'math' | 'science' | 'wrong-answers' | 'qna'>(() => {
-    const saved = safeLocalStorageGet<'home' | 'math' | 'science' | 'wrong-answers' | 'qna'>('puleo_current_view', 'home');
-    return saved || 'home';
+  const [currentView, setCurrentView] = useState<'home' | 'math' | 'science' | 'qna'>(() => {
+    const saved = safeLocalStorageGet<any>('puleo_current_view', 'home');
+    if (saved === 'wrong-answers') return 'home';
+    return saved === 'math' || saved === 'science' || saved === 'qna' ? saved : 'home';
   });
 
-  const [initialSubjectTab, setInitialSubjectTab] = useState<'problems' | 'concepts' | 'facts' | 'unit_tests'>(() => {
-    const saved = safeLocalStorageGet<'problems' | 'concepts' | 'facts' | 'unit_tests'>('puleo_initial_subject_tab', 'problems');
-    return saved || 'problems';
-  });
+  const [initialSubjectTab, setInitialSubjectTab] = useState<'problems' | 'concepts'>('problems');
 
   const [selectedProblem, setSelectedProblem] = useState<ProblemItem | null>(() => {
     return safeLocalStorageGet<ProblemItem | null>('puleo_selected_problem', null);
@@ -81,6 +72,38 @@ export default function App() {
   const [isAskQuestionOpen, setIsAskQuestionOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [problemForAI, setProblemForAI] = useState<ProblemItem | null>(null);
+
+  // Synchronize top-level modals with browser back/forward history
+  useModalHistory(!!selectedProblem, () => setSelectedProblem(null), 'problem-detail');
+  useModalHistory(
+    isAskQuestionOpen,
+    () => {
+      setIsAskQuestionOpen(false);
+      setProblemForAI(null);
+    },
+    'ask-ai-modal'
+  );
+  useModalHistory(isProfileOpen, () => setIsProfileOpen(false), 'profile-modal');
+
+  // Exit Guard & Toast state for preventing accidental website exit on Home
+  const [showExitToast, setShowExitToast] = useState(false);
+  const exitWarningTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cloud DB error banner notice (e.g., Supabase RLS policy blocks)
+  const [dbErrorNotice, setDbErrorNotice] = useState<string | null>(null);
+  const dbErrorTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const notifyDbError = (actionLabel: string, errMsg?: string) => {
+    const isRls = Boolean(
+      errMsg && (errMsg.toLowerCase().includes('row-level security') || errMsg.includes('42501'))
+    );
+    const formatted = isRls
+      ? `${actionLabel} 실패: Supabase RLS(행 수준 보안) 정책 때문에 저장이 차단되었습니다. supabase_schema.sql을 SQL Editor에서 실행해주세요.`
+      : `${actionLabel} 실패: ${errMsg || 'Supabase 저장 중 오류가 발생했습니다.'}`;
+    setDbErrorNotice(formatted);
+    if (dbErrorTimerRef.current) clearTimeout(dbErrorTimerRef.current);
+    dbErrorTimerRef.current = setTimeout(() => setDbErrorNotice(null), 7000);
+  };
 
   // Persistent State
   const [problems, setProblems] = useState<ProblemItem[]>(() => {
@@ -192,120 +215,24 @@ export default function App() {
 
     async function syncFromCloud() {
       try {
-        // 클라우드 DB 연결 가능 여부 선제 확인 (URL 미등록 또는 네트워크 실패 시 불필요한 요청 방지)
         const diag = await testSupabaseConnection();
         if (diag.status !== 'connected' || !isMounted) {
           return;
         }
 
-        // 1. 회원 계정 동기화 (클라우드에 있는 회원 정보 가져와 로컬 캐시 갱신)
+        // 1. 회원 계정 동기화 (`users` 테이블)
         await fetchStoredAccountsFromDB();
 
-        // 2. 커뮤니티 질문 동기화
+        // 2. Q&A 질문 & 선생님 답변 동기화 (`questions` + `answers` 테이블)
         const cloudQuestions = await dbFetchCommunityQuestions();
-        if (isMounted && Array.isArray(cloudQuestions) && cloudQuestions.length > 0) {
-          const mapped: CommunityQuestion[] = cloudQuestions.map((q: any) => ({
-            id: String(q.id),
-            authorId: q.author_id,
-            authorName: q.author_name,
-            authorRole: q.author_role || 'student',
-            authorSchool: q.author_school,
-            authorGrade: q.author_grade,
-            subject: q.subject,
-            textbookRef: q.textbook_ref,
-            title: q.title,
-            content: q.content,
-            imageUrl: q.image_url,
-            createdAt: q.created_at,
-            status: q.status || 'waiting',
-            likes: q.likes || 0,
-            teacherAnswer: q.teacher_answer,
-          }));
-          setCommunityQuestions(mapped);
+        if (isMounted && Array.isArray(cloudQuestions)) {
+          setCommunityQuestions(cloudQuestions);
         }
 
-        // 3. 교과서 문제 동기화
+        // 3. 교과서 문제 동기화 (`textbook_problems` 테이블)
         const cloudProblems = await dbFetchTextbookProblems();
-        if (isMounted && Array.isArray(cloudProblems) && cloudProblems.length > 0) {
-          const mapped: ProblemItem[] = cloudProblems.map((p: any) => ({
-            id: String(p.id),
-            textbookId: p.textbook_id || 'high1-math-miraen',
-            subject: p.subject || 'math',
-            grade: p.grade || 'high_1',
-            chapter: p.chapter || '',
-            unitNumber: p.unit_number || '1',
-            unitName: p.unit_name || '',
-            subUnitId: p.sub_unit_id || 'unit-1',
-            unitCode: p.unit_code || 'unit-1',
-            pageNumber: p.page_number || 1,
-            problemNumber: p.problem_number || '1',
-            problemType: p.problem_type || '예제',
-            difficulty: p.difficulty || '보통',
-            problemText: p.problem_text || '',
-            solutionSteps: p.solution_steps || [],
-            finalAnswer: p.final_answer || '',
-            coreConcepts: p.core_concepts || [],
-            dreamTip: p.dream_tip || '',
-            solutionImage: p.solution_image || undefined,
-            peerTips: p.peer_tips || [],
-            studentSolutions: p.student_solutions || [],
-            views: p.views || 1,
-            likes: p.likes || 0,
-          }));
-          setProblems((prev) => {
-            // Merge cloud problems with existing ones without duplicating
-            const existingIds = new Set(mapped.map((m) => m.id));
-            const remaining = prev.filter((item) => !existingIds.has(item.id));
-            return [...mapped, ...remaining];
-          });
-        }
-
-        // 4. 흥미로운 사실 포스터 동기화
-        const cloudFacts = await dbFetchInterestingFacts();
-        if (isMounted && Array.isArray(cloudFacts) && cloudFacts.length > 0) {
-          const mapped: InterestingFactItem[] = cloudFacts.map((f: any) => ({
-            id: String(f.id),
-            subject: f.subject,
-            title: f.title,
-            subtitle: f.subtitle,
-            category: f.category,
-            content: f.content,
-            posterImage: f.poster_image,
-            authorName: f.author_name || '선생님 공식 포스터',
-            tags: f.tags || [],
-            likes: f.likes || 0,
-            likedUserIds: f.liked_user_ids || [],
-            bgGradient: f.bg_gradient,
-            createdAt: f.created_at,
-          }));
-          setInterestingFacts(mapped);
-        }
-
-        // 5. 핵심 개념 동기화
-        const cloudConcepts = await dbFetchConcepts();
-        if (isMounted && Array.isArray(cloudConcepts) && cloudConcepts.length > 0) {
-          const mapped: ConceptItem[] = cloudConcepts.map((c: any) => ({
-            id: String(c.id),
-            subject: c.subject,
-            chapterId: c.chapter_id || '',
-            chapterName: c.chapter || '',
-            subUnitId: c.sub_unit_id || '',
-            subUnitTitle: c.sub_unit_title || c.unit_name || '',
-            title: c.title,
-            summary: c.summary || '',
-            badge: c.badge || undefined,
-            keyPoints: c.key_points || [],
-            formulasAndReactions: c.formulas_and_reactions || undefined,
-            teacherTips: c.teacher_tips || undefined,
-            quickChecks: c.quick_checks || undefined,
-            diagramImageUrl: c.diagram_image_url || undefined,
-            tags: c.tags || [],
-            authorName: c.author_name || '선생님',
-            createdAt: c.created_at ? String(c.created_at).split('T')[0] : '',
-            likes: c.likes || 0,
-            likedUserIds: c.liked_user_ids || [],
-          }));
-          setConcepts(mapped);
+        if (isMounted && Array.isArray(cloudProblems)) {
+          setProblems(cloudProblems);
         }
       } catch (err) {
         console.warn('Initial cloud sync error:', err);
@@ -317,7 +244,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isLoggedIn]);
 
   const handleLoginSuccess = (profile: UserProfile) => {
     setUserProfile(profile);
@@ -433,10 +360,25 @@ export default function App() {
       setSelectedProblem(newProb);
     }
 
-    // Supabase 클라우드 DB 저장
+    // Supabase 클라우드 DB 저장 (`textbook_problems`)
     if (isSupabaseConfigured) {
       dbSaveTextbookProblem(newProb).then((result) => {
-        if (!result.success) console.error('문제 DB 저장 실패:', result.error);
+        if (!result.success) {
+          console.error('문제 DB 저장 실패:', result.error);
+          notifyDbError('문제 저장', result.error);
+        } else if (result.problemImageUrl || result.solutionImageUrl) {
+          setProblems((prev) =>
+            prev.map((p) =>
+              p.id === newProb.id
+                ? {
+                    ...p,
+                    problemImage: result.problemImageUrl || p.problemImage,
+                    solutionImage: result.solutionImageUrl || p.solutionImage,
+                  }
+                : p
+            )
+          );
+        }
       });
     }
   };
@@ -447,9 +389,24 @@ export default function App() {
 
     // Supabase 클라우드 DB 저장 (다건)
     if (isSupabaseConfigured) {
-      newProbs.forEach((p) => {
-        dbSaveTextbookProblem(p).then((result) => {
-          if (!result.success) console.error('문제 DB 저장 실패:', result.error);
+      newProbs.forEach((prob) => {
+        dbSaveTextbookProblem(prob).then((result) => {
+          if (!result.success) {
+            console.error('문제 DB 저장 실패:', result.error);
+            notifyDbError('문제 일괄 저장', result.error);
+          } else if (result.problemImageUrl || result.solutionImageUrl) {
+            setProblems((prev) =>
+              prev.map((p) =>
+                p.id === prob.id
+                  ? {
+                      ...p,
+                      problemImage: result.problemImageUrl || p.problemImage,
+                      solutionImage: result.solutionImageUrl || p.solutionImage,
+                    }
+                  : p
+              )
+            );
+          }
         });
       });
     }
@@ -464,12 +421,17 @@ export default function App() {
     // Supabase 클라우드 DB 삭제
     if (isSupabaseConfigured) {
       dbDeleteTextbookProblem(problemId).then((result) => {
-        if (!result.success) console.error('문제 DB 삭제 실패:', result.error);
+        if (!result.success) {
+          console.error('문제 DB 삭제 실패:', result.error);
+          notifyDbError('문제 삭제', result.error);
+        }
       });
     }
   };
 
   const handleUpdateProblem = (updatedProblem: ProblemItem) => {
+    if (userProfile.role !== 'admin') return;
+
     setProblems((prev) =>
       prev.map((p) => (p.id === updatedProblem.id ? updatedProblem : p))
     );
@@ -480,47 +442,54 @@ export default function App() {
     // Supabase 클라우드 DB 수정
     if (isSupabaseConfigured) {
       dbUpdateTextbookProblem(updatedProblem.id, updatedProblem).then((result) => {
-        if (!result.success) console.error('문제 DB 수정 실패:', result.error);
+        if (!result.success) {
+          console.error('문제 DB 수정 실패:', result.error);
+          notifyDbError('문제 수정', result.error);
+        } else if (result.problemImageUrl || result.solutionImageUrl) {
+          setProblems((prev) =>
+            prev.map((p) =>
+              p.id === updatedProblem.id
+                ? {
+                    ...p,
+                    problemImage: result.problemImageUrl || p.problemImage,
+                    solutionImage: result.solutionImageUrl || p.solutionImage,
+                  }
+                : p
+            )
+          );
+          setSelectedProblem((prev) =>
+            prev && prev.id === updatedProblem.id
+              ? {
+                  ...prev,
+                  problemImage: result.problemImageUrl || prev.problemImage,
+                  solutionImage: result.solutionImageUrl || prev.solutionImage,
+                }
+              : prev
+          );
+        }
       });
     }
   };
 
-  // Interesting Facts Handlers (Admin creates/deletes, 1 like per user account)
+  // Interesting Facts Handlers (로컬 저장소 유지)
   const handleAddNewFact = (newFact: InterestingFactItem) => {
     setInterestingFacts((prev) => [newFact, ...prev]);
-
-    // Supabase 클라우드 DB 저장
-    if (isSupabaseConfigured) {
-      dbSaveInterestingFact(newFact).then((result) => {
-        if (!result.success) console.error('포스터 DB 저장 실패:', result.error);
-      });
-    }
   };
 
   const handleDeleteFact = (factId: string) => {
     setInterestingFacts((prev) => prev.filter((f) => f.id !== factId));
-
-    // Supabase 클라우드 DB 삭제
-    if (isSupabaseConfigured) {
-      dbDeleteInterestingFact(factId).then((result) => {
-        if (!result.success) console.error('포스터 DB 삭제 실패:', result.error);
-      });
-    }
   };
 
   const handleToggleLikeFact = (factId: string) => {
     const activeUserId = userProfile.id || userProfile.loginId || 'user_account_default';
-    let wasLiked = false;
 
     setInterestingFacts((prev) =>
       prev.map((f) => {
         if (f.id !== factId) return f;
         const currentLikedUsers = Array.isArray(f.likedUserIds) ? f.likedUserIds : [];
         const isAlreadyLiked = currentLikedUsers.includes(activeUserId);
-        wasLiked = isAlreadyLiked;
 
         if (isAlreadyLiked) {
-          // Unlike (1 like per account toggle off)
           const updatedUsers = currentLikedUsers.filter((uid) => uid !== activeUserId);
           return {
             ...f,
@@ -528,7 +497,6 @@ export default function App() {
             likedUserIds: updatedUsers,
           };
         } else {
-          // Like (add user ID)
           return {
             ...f,
             likes: (f.likes || 0) + 1,
@@ -537,48 +505,25 @@ export default function App() {
         }
       })
     );
-
-    // Supabase 클라우드 DB 저장
-    if (isSupabaseConfigured) {
-      dbToggleLikeInterestingFact(factId, activeUserId, wasLiked).then((result) => {
-        if (!result.success) console.error('포스터 좋아요 DB 저장 실패:', result.error);
-      });
-    }
   };
 
-  // Concept Notes Handlers (Admin creates/deletes, 1 like per user account)
+  // Concept Notes Handlers (로컬 저장소 유지)
   const handleAddNewConcept = (newConcept: ConceptItem) => {
     setConcepts((prev) => [newConcept, ...prev]);
-
-    // Supabase 클라우드 DB 저장
-    if (isSupabaseConfigured) {
-      dbSaveConcept(newConcept).then((result) => {
-        if (!result.success) console.error('개념 DB 저장 실패:', result.error);
-      });
-    }
   };
 
   const handleDeleteConcept = (conceptId: string) => {
     setConcepts((prev) => prev.filter((c) => c.id !== conceptId));
-
-    // Supabase 클라우드 DB 삭제
-    if (isSupabaseConfigured) {
-      dbDeleteConcept(conceptId).then((result) => {
-        if (!result.success) console.error('개념 DB 삭제 실패:', result.error);
-      });
-    }
   };
 
   const handleToggleLikeConcept = (conceptId: string) => {
     const activeUserId = userProfile.id || userProfile.loginId || 'user_account_default';
-    let wasLiked = false;
 
     setConcepts((prev) =>
       prev.map((c) => {
         if (c.id !== conceptId) return c;
         const currentLikedUsers = Array.isArray(c.likedUserIds) ? c.likedUserIds : [];
         const isAlreadyLiked = currentLikedUsers.includes(activeUserId);
-        wasLiked = isAlreadyLiked;
 
         if (isAlreadyLiked) {
           const updatedUsers = currentLikedUsers.filter((uid) => uid !== activeUserId);
@@ -596,23 +541,22 @@ export default function App() {
         }
       })
     );
-
-    // Supabase 클라우드 DB 저장
-    if (isSupabaseConfigured) {
-      dbToggleLikeConcept(conceptId, activeUserId, wasLiked).then((result) => {
-        if (!result.success) console.error('개념 좋아요 DB 저장 실패:', result.error);
-      });
-    }
   };
 
-  // Community Questions Handlers
+  // Community Questions Handlers (`questions` & `answers` 테이블)
   const handleAddCommunityQuestion = (newQ: CommunityQuestion) => {
     setCommunityQuestions((prev) => [newQ, ...prev]);
 
-    // Supabase 클라우드 DB 저장
     if (isSupabaseConfigured) {
       dbSaveCommunityQuestion(newQ).then((result) => {
-        if (!result.success) console.error('커뮤니티 질문 DB 저장 실패:', result.error);
+        if (!result.success) {
+          console.error('질문 DB 저장 실패:', result.error);
+          notifyDbError('질문 등록', result.error);
+        } else if (result.imageUrl) {
+          setCommunityQuestions((prev) =>
+            prev.map((q) => (q.id === newQ.id ? { ...q, imageUrl: result.imageUrl } : q))
+          );
+        }
       });
     }
   };
@@ -630,10 +574,26 @@ export default function App() {
       )
     );
 
-    // Supabase 클라우드 DB 저장
     if (isSupabaseConfigured) {
       dbAnswerCommunityQuestion(questionId, answer).then((result) => {
-        if (!result.success) console.error('선생님 답변 DB 저장 실패:', result.error);
+        if (!result.success) {
+          console.error('선생님 답변 DB 저장 실패:', result.error);
+          notifyDbError('선생님 답변 저장', result.error);
+        } else if (result.solutionImageUrl) {
+          setCommunityQuestions((prev) =>
+            prev.map((q) =>
+              q.id === questionId && q.teacherAnswer
+                ? {
+                    ...q,
+                    teacherAnswer: {
+                      ...q.teacherAnswer,
+                      imageUrl: result.solutionImageUrl,
+                    },
+                  }
+                : q
+            )
+          );
+        }
       });
     }
   };
@@ -641,10 +601,28 @@ export default function App() {
   const handleDeleteCommunityQuestion = (questionId: string) => {
     setCommunityQuestions((prev) => prev.filter((q) => q.id !== questionId));
 
-    // Supabase 클라우드 DB 삭제
     if (isSupabaseConfigured) {
       dbDeleteCommunityQuestion(questionId).then((result) => {
-        if (!result.success) console.error('커뮤니티 질문 DB 삭제 실패:', result.error);
+        if (!result.success) {
+          console.error('질문 DB 삭제 실패:', result.error);
+          notifyDbError('질문 삭제', result.error);
+        }
+      });
+    }
+  };
+
+  const handleToggleLikeCommunityQuestion = (questionId: string, increment: boolean) => {
+    setCommunityQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? { ...q, likes: Math.max(0, (q.likes || 0) + (increment ? 1 : -1)) }
+          : q
+      )
+    );
+
+    if (isSupabaseConfigured) {
+      dbToggleLikeCommunityQuestion(questionId, increment).then((result) => {
+        if (!result.success) console.error('질문 좋아요 DB 저장 실패:', result.error);
       });
     }
   };
@@ -661,6 +639,106 @@ export default function App() {
   };
 
   const waitingCount = communityQuestions.filter((q) => q.status === 'waiting').length;
+
+  // View navigation helper with browser history pushState
+  const navigateToView = (view: 'home' | 'math' | 'science' | 'wrong-answers' | 'qna') => {
+    safeLocalStorageSet('puleo_current_view', view);
+    if (view === currentView) return;
+    try {
+      window.history.pushState({ puleoRoot: true, puleoView: view, timestamp: Date.now() }, '', `#${view}`);
+    } catch {
+      // safe fallback
+    }
+    setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'instant' as any });
+  };
+
+  // Immediate, unconditional navigation to Home
+  const handleGoHome = () => {
+    // 1. Close all active modals & reset active problem
+    setSelectedProblem(null);
+    setIsAskQuestionOpen(false);
+    setIsProfileOpen(false);
+    setProblemForAI(null);
+
+    // 2. Persist view state
+    safeLocalStorageSet('puleo_current_view', 'home');
+    safeLocalStorageSet('puleo_selected_problem', null);
+
+    // 3. Push clean home state to browser history
+    try {
+      window.history.pushState({ puleoRoot: true, puleoView: 'home', step: 1, timestamp: Date.now() }, '', '#home');
+    } catch {
+      // safe fallback
+    }
+
+    // 4. Directly update current view
+    setCurrentView('home');
+
+    // 5. Scroll to top instantly
+    window.scrollTo({ top: 0, behavior: 'instant' as any });
+  };
+
+  // Synchronize browser forward/back buttons with views and exit guard
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    // Check initial hash on load
+    const currentHash = window.location.hash.replace('#', '');
+    const validViews: Array<'home' | 'math' | 'science' | 'qna'> = [
+      'home', 'math', 'science', 'qna'
+    ];
+
+    let startView = currentView;
+    if (validViews.includes(currentHash as any)) {
+      startView = currentHash as any;
+      if (startView !== currentView) {
+        setCurrentView(startView);
+      }
+    }
+
+    // Initialize history baseline with exit guard
+    if (!window.history.state || !window.history.state.puleoRoot) {
+      window.history.replaceState({ puleoRoot: true, puleoExitGuard: true, step: 0 }, '', '#guard');
+      window.history.pushState({ puleoRoot: true, puleoView: startView, step: 1 }, '', `#${startView}`);
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. Check if user pressed Back while at base/Home guard
+      if (e.state?.puleoExitGuard) {
+        if (exitWarningTimerRef.current) {
+          // Pressed back twice quickly -> allow closing/exiting
+          clearTimeout(exitWarningTimerRef.current);
+          exitWarningTimerRef.current = null;
+          window.history.back();
+          return;
+        }
+
+        // Show friendly toast informing user they are on home
+        setShowExitToast(true);
+        // Re-push home to keep the app safely open
+        window.history.pushState({ puleoRoot: true, puleoView: 'home', step: 1 }, '', '#home');
+        setCurrentView('home');
+
+        exitWarningTimerRef.current = setTimeout(() => {
+          setShowExitToast(false);
+          exitWarningTimerRef.current = null;
+        }, 2500);
+        return;
+      }
+
+      // 2. View transitions
+      const targetView = e.state?.puleoView;
+      if (targetView && validViews.includes(targetView)) {
+        setCurrentView(targetView);
+      } else if (!targetView && !e.state?.puleoModal && !e.state?.puleoExitGuard) {
+        setCurrentView('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isLoggedIn, currentView]);
 
   // If not logged in, display the Login Screen first
   if (!isLoggedIn) {
@@ -681,21 +759,18 @@ export default function App() {
               className="w-full"
             >
               <HomeScreen
-                onSelectMath={() => setCurrentView('math')}
-                onSelectScience={() => setCurrentView('science')}
-                onSelectWrongAnswers={() => setCurrentView('wrong-answers')}
+                onSelectMath={() => navigateToView('math')}
+                onSelectScience={() => navigateToView('science')}
                 onSelectAskQuestion={() => {
                   setProblemForAI(null);
                   setIsAskQuestionOpen(true);
                 }}
-                onSelectQnA={() => setCurrentView('qna')}
+                onSelectQnA={() => navigateToView('qna')}
                 onOpenProfile={() => setIsProfileOpen(true)}
                 onLogout={handleLogout}
                 userRole={userProfile.role}
                 solvedCount={userProfile.solvedCount}
                 waitingQuestionsCount={waitingCount}
-                wrongQuestionsCount={userProfile.wrongQuizQuestions?.length || 0}
-                unreviewedWrongCount={(userProfile.wrongQuizQuestions || []).filter((q) => !q.isReviewed).length}
               />
             </motion.div>
           )}
@@ -712,10 +787,11 @@ export default function App() {
               <CommunityQnAView
                 userProfile={userProfile}
                 questions={communityQuestions}
-                onGoBack={() => setCurrentView('home')}
+                onGoBack={handleGoHome}
                 onAddQuestion={handleAddCommunityQuestion}
                 onAnswerQuestion={handleAnswerCommunityQuestion}
                 onDeleteQuestion={userProfile.role === 'admin' ? handleDeleteCommunityQuestion : undefined}
+                onToggleLikeQuestion={handleToggleLikeCommunityQuestion}
               />
             </motion.div>
           )}
@@ -736,22 +812,17 @@ export default function App() {
                 bookmarkedProblemIds={userProfile.bookmarkedProblemIds}
                 userRole={userProfile.role}
                 currentUserId={userProfile.id || userProfile.loginId || 'user_account_default'}
-                facts={interestingFacts}
                 concepts={concepts}
                 initialTab={initialSubjectTab}
                 onSelectProblem={(prob) => setSelectedProblem(prob)}
-                onGoBack={() => setCurrentView('home')}
+                onGoBack={handleGoHome}
                 onAddNewProblem={handleAddNewProblem}
                 onAddNewProblems={handleAddNewProblems}
-                onDeleteProblem={handleDeleteProblem}
-                onUpdateProblem={handleUpdateProblem}
-                onAddNewFact={handleAddNewFact}
-                onDeleteFact={handleDeleteFact}
-                onToggleLikeFact={handleToggleLikeFact}
+                onUpdateProblem={userProfile.role === 'admin' ? handleUpdateProblem : undefined}
+                onDeleteProblem={userProfile.role === 'admin' ? handleDeleteProblem : undefined}
                 onAddNewConcept={handleAddNewConcept}
                 onDeleteConcept={handleDeleteConcept}
                 onToggleLikeConcept={handleToggleLikeConcept}
-                onCompleteQuiz={handleCompleteQuiz}
               />
             </motion.div>
           )}
@@ -772,46 +843,21 @@ export default function App() {
                 bookmarkedProblemIds={userProfile.bookmarkedProblemIds}
                 userRole={userProfile.role}
                 currentUserId={userProfile.id || userProfile.loginId || 'user_account_default'}
-                facts={interestingFacts}
                 concepts={concepts}
                 initialTab={initialSubjectTab}
                 onSelectProblem={(prob) => setSelectedProblem(prob)}
-                onGoBack={() => setCurrentView('home')}
+                onGoBack={handleGoHome}
                 onAddNewProblem={handleAddNewProblem}
                 onAddNewProblems={handleAddNewProblems}
-                onDeleteProblem={handleDeleteProblem}
-                onUpdateProblem={handleUpdateProblem}
-                onAddNewFact={handleAddNewFact}
-                onDeleteFact={handleDeleteFact}
-                onToggleLikeFact={handleToggleLikeFact}
+                onUpdateProblem={userProfile.role === 'admin' ? handleUpdateProblem : undefined}
+                onDeleteProblem={userProfile.role === 'admin' ? handleDeleteProblem : undefined}
                 onAddNewConcept={handleAddNewConcept}
                 onDeleteConcept={handleDeleteConcept}
                 onToggleLikeConcept={handleToggleLikeConcept}
-                onCompleteQuiz={handleCompleteQuiz}
               />
             </motion.div>
           )}
 
-          {currentView === 'wrong-answers' && (
-            <motion.div
-              key="wrong-answers"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.25 }}
-              className="w-full"
-            >
-              <WrongAnswersNoteView
-                userProfile={userProfile}
-                onUpdateProfile={(updated) => setUserProfile((prev) => ({ ...prev, ...updated }))}
-                onGoBack={() => setCurrentView('home')}
-                onNavigateToSubject={(subj, tab) => {
-                  setInitialSubjectTab(tab || (subj === 'science' ? 'concepts' : 'problems'));
-                  setCurrentView(subj);
-                }}
-              />
-            </motion.div>
-          )}
         </AnimatePresence>
       </main>
 
@@ -825,9 +871,10 @@ export default function App() {
             userRole={userProfile.role}
             onToggleBookmark={handleToggleBookmark}
             onClose={() => setSelectedProblem(null)}
+            onGoHome={handleGoHome}
             onAskAIAboutProblem={handleAskAIAboutSpecificProblem}
             onDeleteProblem={userProfile.role === 'admin' ? handleDeleteProblem : undefined}
-            onUpdateProblem={handleUpdateProblem}
+            onUpdateProblem={userProfile.role === 'admin' ? handleUpdateProblem : undefined}
           />
         )}
       </AnimatePresence>
@@ -857,13 +904,50 @@ export default function App() {
             onUpdateProfile={(updated) => setUserProfile((prev) => ({ ...prev, ...updated }))}
             onSelectProblem={(prob) => setSelectedProblem(prob)}
             onSelectHistoryQuestion={handleSelectHistoryQuestion}
-            onOpenWrongAnswersNote={() => {
-              setIsProfileOpen(false);
-              setCurrentView('wrong-answers');
-            }}
             onLogout={handleLogout}
             onClose={() => setIsProfileOpen(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Cloud DB Error Notice Banner */}
+      <AnimatePresence>
+        {dbErrorNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92vw] px-4 py-3 bg-rose-950/95 backdrop-blur-md text-rose-100 text-xs sm:text-sm font-semibold rounded-2xl shadow-2xl flex items-start justify-between gap-3 border border-rose-500/40"
+          >
+            <div className="flex items-start gap-2">
+              <span className="w-2 h-2 mt-1.5 rounded-full bg-rose-400 shrink-0 animate-pulse"></span>
+              <span>{dbErrorNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDbErrorNotice(null)}
+              className="text-rose-300 hover:text-white text-xs font-bold shrink-0 px-1.5 py-0.5 rounded bg-rose-900/60"
+            >
+              닫기
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Home Exit Guard Toast Banner */}
+      <AnimatePresence>
+        {showExitToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-slate-900/90 backdrop-blur-md text-white text-xs sm:text-sm font-bold rounded-full shadow-2xl flex items-center gap-2 border border-white/20 pointer-events-none"
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span>홈 화면입니다. 한 번 더 뒤로가기를 누르면 사이트에서 나갑니다.</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

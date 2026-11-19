@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useModalHistory } from '../utils/navigationHistory';
 import {
   BookOpen,
   Sparkles,
@@ -64,6 +65,8 @@ export const ConceptMasterView: React.FC<ConceptMasterViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [conceptToDelete, setConceptToDelete] = useState<ConceptItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useModalHistory(showAddModal, () => setShowAddModal(false), 'concept-add-modal');
 
   // Admin Form State
   const [formChapterId, setFormChapterId] = useState('');

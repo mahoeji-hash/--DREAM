@@ -1,17 +1,13 @@
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { UserAccount, UserProfile, GradeType } from '../types';
+import { supabase, isSupabaseConfigured, generateUuid, isValidUuid } from '../supabaseClient';
+import { UserAccount, UserProfile, GradeType, UserRole } from '../types';
 import { safeLocalStorageGet, safeLocalStorageSet } from './storageService';
 
 const STORAGE_ACCOUNTS_KEY = 'puleo_dream_user_accounts_v3';
 
 // 보안 관리자 인증을 위한 솔트 및 암호화 해시 (SHA-256)
-// 원본 암호는 단방향 솔트 암호화되어 소스코드 및 번들 파일에서 복호화/추적이 원천 불가능합니다.
 const ADMIN_KEY_SALT = 'puleo_hwawon_super_admin_salt_923_2026';
 const ADMIN_CODE_HASH = 'd2dbb63fe099012c082170a2c622690b081ff2b4c307cd75fa8320b3f1f2c523';
 
-/**
- * 브라우저 WebCrypto 기반 단방향 SHA-256 해시 계산 함수
- */
 async function computeSha256Hex(text: string): Promise<string> {
   if (typeof crypto !== 'undefined' && crypto.subtle) {
     const encoder = new TextEncoder();
@@ -23,14 +19,31 @@ async function computeSha256Hex(text: string): Promise<string> {
   return '';
 }
 
-/**
- * 관리자 비밀 인증코드 검증 함수 (단방향 해시 일치 여부 확인)
- */
 export async function verifyAdminSecretCode(inputCode: string): Promise<boolean> {
   if (!inputCode) return false;
   const clean = inputCode.trim();
   const hash = await computeSha256Hex(ADMIN_KEY_SALT + clean + ADMIN_KEY_SALT);
   return hash === ADMIN_CODE_HASH;
+}
+
+function normalizeRole(rawRole?: string | null): UserRole {
+  if (rawRole === 'admin' || rawRole === 'teacher') return 'admin';
+  return 'student';
+}
+
+function mapDbUserToAccount(row: any): UserAccount {
+  const normalizedRole = normalizeRole(row.role);
+  return {
+    id: String(row.id),
+    loginId: row.user_id || '',
+    passwordHash: row.password || '',
+    role: normalizedRole,
+    nickname: row.name || row.user_id || '사용자',
+    schoolName: row.school || '대구화원고등학교',
+    grade: (row.grade as GradeType) || 'high_1',
+    avatarSeed: normalizedRole === 'admin' ? 'admin_avatar' : 'student_avatar',
+    createdAt: row.created_at || new Date().toISOString(),
+  };
 }
 
 // 로컬 스토리지에 캐시된 계정 목록 반환 (동기 함수)
@@ -44,26 +57,21 @@ export const saveAccountsToLocalStorage = (accounts: UserAccount[]): void => {
   safeLocalStorageSet(STORAGE_ACCOUNTS_KEY, accounts);
 };
 
-// 전체 계정 목록 조회 (비동기 DB)
+// 전체 계정 목록 조회 (Supabase `users` 테이블)
 export const fetchStoredAccountsFromDB = async (): Promise<UserAccount[]> => {
   try {
     if (!isSupabaseConfigured) {
       return getStoredAccounts();
     }
-    const { data, error } = await supabase.from('user_accounts').select('*');
-    if (error || !Array.isArray(data)) return getStoredAccounts();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, user_id, password, role, name, school, grade, created_at');
 
-    const accounts: UserAccount[] = data.map((acc) => ({
-      id: acc.id,
-      loginId: acc.login_id,
-      passwordHash: acc.password_hash,
-      role: acc.role,
-      nickname: acc.nickname,
-      schoolName: acc.school_name,
-      grade: acc.grade,
-      avatarSeed: acc.avatar_seed,
-      createdAt: acc.created_at,
-    }));
+    if (error || !Array.isArray(data)) {
+      return getStoredAccounts();
+    }
+
+    const accounts: UserAccount[] = data.map(mapDbUserToAccount);
     saveAccountsToLocalStorage(accounts);
     return accounts;
   } catch {
@@ -71,7 +79,7 @@ export const fetchStoredAccountsFromDB = async (): Promise<UserAccount[]> => {
   }
 };
 
-// 계정 삭제
+// 계정 삭제 (Supabase `users` 테이블 + LocalStorage)
 export const deleteAccountById = async (accountId: string): Promise<boolean> => {
   try {
     const local = getStoredAccounts();
@@ -79,10 +87,11 @@ export const deleteAccountById = async (accountId: string): Promise<boolean> => 
     saveAccountsToLocalStorage(filtered);
 
     if (isSupabaseConfigured) {
-      await supabase
-        .from('user_accounts')
-        .delete()
-        .or(`id.eq.${accountId},login_id.eq.${accountId}`);
+      if (isValidUuid(accountId)) {
+        await supabase.from('users').delete().eq('id', accountId);
+      } else {
+        await supabase.from('users').delete().eq('user_id', accountId);
+      }
     }
 
     return true;
@@ -91,7 +100,7 @@ export const deleteAccountById = async (accountId: string): Promise<boolean> => 
   }
 };
 
-// 회원가입 (Supabase DB 저장 + LocalStorage 백업)
+// 회원가입 (Supabase `users` 테이블 저장 + LocalStorage 백업)
 export const registerAccount = async (data: {
   loginId: string;
   password: string;
@@ -104,7 +113,7 @@ export const registerAccount = async (data: {
   const loginIdClean = data.loginId.trim();
   const passwordClean = data.password.trim();
   const nicknameClean = data.nickname.trim();
-  const schoolNameClean = data.schoolName.trim() || '우리학교';
+  const schoolNameClean = data.schoolName.trim() || '대구화원고등학교';
 
   if (!loginIdClean || loginIdClean.length < 3) {
     return { success: false, error: '아이디는 최소 3글자 이상이어야 합니다.' };
@@ -128,15 +137,7 @@ export const registerAccount = async (data: {
     }
   }
 
-  const localAccounts = getStoredAccounts();
-  const localExisting = localAccounts.find(
-    (acc) => acc.loginId.toLowerCase() === loginIdClean.toLowerCase()
-  );
-  if (localExisting) {
-    return { success: false, error: '이미 사용 중인 아이디입니다. 다른 아이디를 입력해주세요.' };
-  }
-
-  const newAccountId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const newAccountId = generateUuid();
   const createdAccount: UserAccount = {
     id: newAccountId,
     loginId: loginIdClean,
@@ -149,77 +150,108 @@ export const registerAccount = async (data: {
     createdAt: new Date().toISOString(),
   };
 
-  // 로컬 스토리지 선반영
-  saveAccountsToLocalStorage([...localAccounts, createdAccount]);
-
-  // Supabase 연동 시 DB 저장
   if (isSupabaseConfigured) {
     try {
+      // 1. Supabase `users` 테이블에서 아이디 중복 확인
       const { data: existing, error: checkError } = await supabase
-        .from('user_accounts')
-        .select('id')
-        .ilike('login_id', loginIdClean)
+        .from('users')
+        .select('id, user_id')
+        .ilike('user_id', loginIdClean)
         .maybeSingle();
 
       if (checkError) {
         const checkMsg = String(checkError.message || checkError.details || '');
-        const isNetworkErr = 
-          checkMsg.toLowerCase().includes('fetch') || 
-          checkMsg.includes('Failed to fetch') ||
+        const isNetworkErr =
+          checkMsg.toLowerCase().includes('fetch') ||
           (checkError as any).name === 'TypeError';
 
-        if (isNetworkErr) {
-          console.warn('Supabase 서버 연결 실패(오프라인 모드로 로컬 계정 등록):', checkMsg);
-          return { success: true, account: createdAccount };
+        if (!isNetworkErr) {
+          console.warn('Supabase ID 중복 확인 경고:', checkError);
         }
-        console.warn('Supabase ID 중복 확인 경고:', checkError);
       }
 
       if (existing) {
         return { success: false, error: '이미 사용 중인 아이디입니다. 다른 아이디를 입력해주세요.' };
       }
 
-      const { error: insertError } = await supabase.from('user_accounts').insert([
-        {
-          id: newAccountId,
-          login_id: loginIdClean,
-          password_hash: passwordClean,
-          role: data.role,
-          nickname: nicknameClean,
-          school_name: schoolNameClean,
-          grade: data.grade,
-          avatar_seed: createdAccount.avatarSeed,
-        },
-      ]);
+      // 2. Supabase `users` 테이블에 신규 회원 저장
+      const { data: insertedRows, error: insertError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: newAccountId,
+            user_id: loginIdClean,
+            password: passwordClean,
+            role: data.role,
+            name: nicknameClean,
+            school: schoolNameClean,
+            grade: data.grade,
+          },
+        ])
+        .select();
 
       if (insertError) {
         const insertMsg = String(insertError.message || insertError.details || '');
-        const isNetworkErr = 
-          insertMsg.toLowerCase().includes('fetch') || 
-          insertMsg.includes('Failed to fetch') ||
+        const isNetworkErr =
+          insertMsg.toLowerCase().includes('fetch') ||
           (insertError as any).name === 'TypeError';
 
         if (isNetworkErr) {
-          console.warn('Supabase DB 연결 실패(오프라인 모드로 로컬 계정 등록):', insertMsg);
+          const localAccounts = getStoredAccounts();
+          saveAccountsToLocalStorage([
+            ...localAccounts.filter((a) => a.loginId.toLowerCase() !== loginIdClean.toLowerCase()),
+            createdAccount,
+          ]);
           return { success: true, account: createdAccount };
         }
 
-        console.warn('Supabase insert 경고:', insertError);
+        if (insertError.code === '23505') {
+          return { success: false, error: '이미 사용 중인 아이디입니다. 다른 아이디를 입력해주세요.' };
+        }
+
+        console.warn('Supabase users insert 오류:', insertError);
         return {
           success: false,
-          error: `Supabase DB 저장 실패 (${insertError.code || 'ERROR'}): ${insertError.message}. SQL 테이블 생성 및 RLS 정책을 확인해주세요.`,
+          error: `Supabase 회원가입 저장 실패 (${insertError.code || 'ERROR'}): ${insertError.message}`,
         };
       }
+
+      const savedAccount =
+        Array.isArray(insertedRows) && insertedRows[0]
+          ? mapDbUserToAccount(insertedRows[0])
+          : createdAccount;
+
+      const localAccounts = getStoredAccounts();
+      saveAccountsToLocalStorage([
+        ...localAccounts.filter((a) => a.loginId.toLowerCase() !== loginIdClean.toLowerCase()),
+        savedAccount,
+      ]);
+
+      return { success: true, account: savedAccount };
     } catch (dbErr: any) {
-      console.warn('Supabase 통신 예외(오프라인 모드로 로컬 계정 등록):', dbErr);
+      console.warn('Supabase 통신 예외(로컬 계정 등록 fallback):', dbErr);
+      const localAccounts = getStoredAccounts();
+      saveAccountsToLocalStorage([
+        ...localAccounts.filter((a) => a.loginId.toLowerCase() !== loginIdClean.toLowerCase()),
+        createdAccount,
+      ]);
       return { success: true, account: createdAccount };
     }
   }
 
+  // 오프라인/로컬 전용 모드
+  const localAccounts = getStoredAccounts();
+  const localExisting = localAccounts.find(
+    (acc) => acc.loginId.toLowerCase() === loginIdClean.toLowerCase()
+  );
+  if (localExisting) {
+    return { success: false, error: '이미 사용 중인 아이디입니다. 다른 아이디를 입력해주세요.' };
+  }
+  saveAccountsToLocalStorage([...localAccounts, createdAccount]);
   return { success: true, account: createdAccount };
 };
 
-// 사용자 인증 (Supabase DB 조회 + LocalStorage Fallback)
+// 사용자 인증 (Supabase `users` 테이블 조회 + LocalStorage Fallback)
 export const authenticateUser = async (
   loginId: string,
   password: string,
@@ -233,36 +265,37 @@ export const authenticateUser = async (
   }
 
   let account: UserAccount | undefined;
+  let dbQueriedSuccessfully = false;
 
-  // 1. Supabase에서 조회 시도
+  // 1. Supabase `users` 테이블에서 조회 시도
   if (isSupabaseConfigured) {
     try {
       const { data, error } = await supabase
-        .from('user_accounts')
-        .select('*')
-        .ilike('login_id', loginIdClean)
+        .from('users')
+        .select('id, user_id, password, role, name, school, grade, created_at')
+        .ilike('user_id', loginIdClean)
         .maybeSingle();
 
+      if (!error) {
+        dbQueriedSuccessfully = true;
+      }
+
       if (!error && data) {
-        account = {
-          id: data.id,
-          loginId: data.login_id,
-          passwordHash: data.password_hash,
-          role: data.role,
-          nickname: data.nickname,
-          schoolName: data.school_name,
-          grade: data.grade,
-          avatarSeed: data.avatar_seed,
-          createdAt: data.created_at,
-        };
+        account = mapDbUserToAccount(data);
+        // 로컬 캐시도 최신화
+        const localAccounts = getStoredAccounts();
+        saveAccountsToLocalStorage([
+          ...localAccounts.filter((a) => a.loginId.toLowerCase() !== account!.loginId.toLowerCase()),
+          account,
+        ]);
       }
     } catch {
-      // ignore
+      // network error -> fallback to local cache below
     }
   }
 
-  // 2. 로컬 스토리지 Fallback
-  if (!account) {
+  // 2. Supabase 통신 실패 시에만 로컬 스토리지 Fallback
+  if (!account && !dbQueriedSuccessfully) {
     const localAccounts = getStoredAccounts();
     account = localAccounts.find(
       (a) => a.loginId.toLowerCase() === loginIdClean.toLowerCase()

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useModalHistory } from '../utils/navigationHistory';
 import {
   X,
   Sparkles,
@@ -9,6 +10,7 @@ import {
   Send,
   Plus,
   ArrowLeft,
+  Home,
   ShieldCheck,
   User,
   School,
@@ -29,10 +31,13 @@ import {
   Maximize2,
   ChevronRight,
   Share2,
+  PlayCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CommunityQuestion, TeacherAnswer, UserProfile, SubjectType, SolutionStep } from '../types';
-import { compressImageFile } from '../services/imageService';
+import { uploadImageFileToBucket } from '../services/imageService';
+import { generateUuid } from '../supabaseClient';
+import { VideoLectureEmbed } from './VideoLectureEmbed';
 
 interface CommunityQnAViewProps {
   userProfile: UserProfile;
@@ -41,6 +46,7 @@ interface CommunityQnAViewProps {
   onAddQuestion: (newQ: CommunityQuestion) => void;
   onAnswerQuestion: (questionId: string, answer: TeacherAnswer) => void;
   onDeleteQuestion?: (questionId: string) => void;
+  onToggleLikeQuestion?: (questionId: string, increment: boolean) => void;
 }
 
 export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
@@ -50,6 +56,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
   onAddQuestion,
   onAnswerQuestion,
   onDeleteQuestion,
+  onToggleLikeQuestion,
 }) => {
   // Navigation & Filtering
   const [activeTab, setActiveTab] = useState<'all' | 'waiting' | 'answered'>('all');
@@ -74,6 +81,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
   const [answerKeyFormula, setAnswerKeyFormula] = useState('');
   const [answerTeacherTip, setAnswerTeacherTip] = useState('');
   const [answerImageUrl, setAnswerImageUrl] = useState<string | null>(null);
+  const [answerVideoUrl, setAnswerVideoUrl] = useState('');
   const answerFileInputRef = useRef<HTMLInputElement | null>(null);
   const answerCameraInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -86,22 +94,41 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
   // Lightbox for enlarged images
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
+  // Synchronize question detail, new question modal, and zoom modal with browser Back button
+  useModalHistory(!!selectedQuestion, () => setSelectedQuestion(null), 'qna-question-detail');
+  useModalHistory(isCreatingNewQ, () => setIsCreatingNewQ(false), 'qna-new-question');
+  useModalHistory(!!zoomImageUrl, () => setZoomImageUrl(null), 'qna-zoom-image');
+
   // Likes state
   const [likedQuestions, setLikedQuestions] = useState<string[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const handleToggleLike = (qId: string) => {
-    if (likedQuestions.includes(qId)) {
+    const alreadyLiked = likedQuestions.includes(qId);
+    if (alreadyLiked) {
       setLikedQuestions(likedQuestions.filter((id) => id !== qId));
     } else {
       setLikedQuestions([...likedQuestions, qId]);
     }
+    if (onToggleLikeQuestion) {
+      onToggleLikeQuestion(qId, !alreadyLiked);
+    }
   };
 
-  const handleImageFileRead = async (file: File, callback: (url: string) => void) => {
+  const handleImageFileRead = async (
+    file: File,
+    folder: 'questions' | 'answers',
+    callback: (url: string) => void
+  ) => {
     if (!file.type.startsWith('image/')) return;
-    const compressed = await compressImageFile(file);
-    if (compressed) {
-      callback(compressed);
+    setIsUploadingImage(true);
+    try {
+      const res = await uploadImageFileToBucket(file, folder);
+      if (res.url) {
+        callback(res.url);
+      }
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -111,8 +138,8 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
     if (!newQTitle.trim() || !newQContent.trim()) return;
 
     const newQuestion: CommunityQuestion = {
-      id: `q-${Date.now()}`,
-      authorId: userProfile.id || `user-${Date.now()}`,
+      id: generateUuid(),
+      authorId: userProfile.id || userProfile.loginId || generateUuid(),
       authorName: userProfile.nickname || '익명 학생',
       authorRole: userProfile.role,
       authorSchool: userProfile.schoolName || '대구화원고등학교',
@@ -148,6 +175,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
       setAnswerKeyFormula(q.teacherAnswer.keyFormula || '');
       setAnswerTeacherTip(q.teacherAnswer.teacherTip || '');
       setAnswerImageUrl(q.teacherAnswer.imageUrl || null);
+      setAnswerVideoUrl(q.teacherAnswer.videoUrl || '');
       if (q.teacherAnswer.solutionSteps && q.teacherAnswer.solutionSteps.length > 0) {
         setSteps(q.teacherAnswer.solutionSteps);
       }
@@ -155,6 +183,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
       setAnswerText('');
       setAnswerKeyFormula('');
       setAnswerImageUrl(null);
+      setAnswerVideoUrl('');
       setAnswerTeacherTip('💡 팁: 교과서 예제와 연계하여 핵심 개념을 차근차근 복습해보세요.');
       setSteps([
         { stepNumber: 1, title: '문제 핵심 조건 분석', explanation: '' },
@@ -209,8 +238,8 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
       }));
 
     const newAnswer: TeacherAnswer = {
-      id: `ans-${Date.now()}`,
-      authorId: userProfile.id || `teacher-${Date.now()}`,
+      id: generateUuid(),
+      authorId: userProfile.id || userProfile.loginId || generateUuid(),
       authorName: `${userProfile.nickname || '담당'} 선생님`,
       authorSchool: userProfile.schoolName || '대구화원고등학교',
       answeredAt: new Date().toLocaleDateString('ko-KR', {
@@ -221,6 +250,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
       }),
       answerText: answerText.trim(),
       imageUrl: answerImageUrl || undefined,
+      videoUrl: answerVideoUrl.trim() || undefined,
       keyFormula: answerKeyFormula.trim() || undefined,
       solutionSteps: validSteps.length > 0 ? validSteps : undefined,
       teacherTip: answerTeacherTip.trim() || undefined,
@@ -286,10 +316,11 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
               id="btn-qna-back-to-home"
               type="button"
               onClick={onGoBack}
-              className="p-2.5 sm:p-3 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border-2 border-amber-200 transition-all hover:scale-105 active:scale-95 shadow-xs shrink-0 flex items-center justify-center"
+              className="px-3.5 py-2.5 rounded-2xl bg-white hover:bg-amber-50 text-slate-800 border-2 border-amber-300 transition-all active:scale-95 shadow-xs shrink-0 flex items-center gap-2 cursor-pointer touch-manipulation select-none"
               title="홈 화면으로 돌아가기"
             >
-              <ArrowLeft className="w-5 h-5 text-amber-800" />
+              <Home className="w-4 h-4 text-amber-600" />
+              <span className="text-xs sm:text-sm font-black text-slate-800">홈으로</span>
             </button>
 
             <div>
@@ -530,13 +561,19 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                   </div>
                 )}
 
+                {isUploadingImage && (
+                  <p className="text-[11px] font-bold text-amber-700 animate-pulse">
+                    사진을 Supabase Storage에 업로드하고 있습니다...
+                  </p>
+                )}
+
                 <input
                   ref={newQFileInputRef}
                   type="file"
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleImageFileRead(file, (url) => setNewQImage(url));
+                    if (file) handleImageFileRead(file, 'questions', (url) => setNewQImage(url));
                   }}
                   className="hidden"
                 />
@@ -547,7 +584,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                   capture="environment"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleImageFileRead(file, (url) => setNewQImage(url));
+                    if (file) handleImageFileRead(file, 'questions', (url) => setNewQImage(url));
                   }}
                   className="hidden"
                 />
@@ -652,7 +689,7 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                   <ThumbsUp className="w-4 h-4" />
                   <span>
                     응원해요{' '}
-                    {selectedQuestion.likes + (likedQuestions.includes(selectedQuestion.id) ? 1 : 0)}
+                    {questions.find((item) => item.id === selectedQuestion.id)?.likes ?? selectedQuestion.likes}
                   </span>
                 </button>
               </div>
@@ -870,13 +907,19 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                       </div>
                     )}
 
+                    {isUploadingImage && (
+                      <p className="text-[11px] font-bold text-amber-800 mt-1 animate-pulse">
+                        풀이 사진을 Supabase Storage에 업로드하고 있습니다...
+                      </p>
+                    )}
+
                     <input
                       ref={answerFileInputRef}
                       type="file"
                       accept="image/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleImageFileRead(file, (url) => setAnswerImageUrl(url));
+                        if (file) handleImageFileRead(file, 'answers', (url) => setAnswerImageUrl(url));
                       }}
                       className="hidden"
                     />
@@ -887,10 +930,36 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                       capture="environment"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleImageFileRead(file, (url) => setAnswerImageUrl(url));
+                        if (file) handleImageFileRead(file, 'answers', (url) => setAnswerImageUrl(url));
                       }}
                       className="hidden"
                     />
+                  </div>
+
+                  {/* Video Lecture / Ingang Input for Teacher */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs sm:text-sm font-bold text-amber-950 flex items-center gap-1.5">
+                        <PlayCircle className="w-4 h-4 text-rose-500" />
+                        <span>선생님 인강 / 해설 동영상 강의 링크 (선택)</span>
+                      </label>
+                      <span className="text-[11px] text-amber-800 font-medium">YouTube 링크 등</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={answerVideoUrl}
+                      onChange={(e) => setAnswerVideoUrl(e.target.value)}
+                      placeholder="예: 유튜브 해설 강의 링크 (https://youtu.be/... 또는 웹 동영상 URL)"
+                      className="w-full px-4 py-3 bg-white rounded-2xl border-2 border-amber-300 text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs"
+                    />
+                    {answerVideoUrl.trim() && (
+                      <div className="pt-1">
+                        <VideoLectureEmbed
+                          videoUrl={answerVideoUrl}
+                          title="인강 해설 동영상 미리보기"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Step by step builders */}
@@ -1016,6 +1085,16 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                     <div className="p-4 bg-amber-100/80 border-2 border-amber-300 rounded-2xl text-xs sm:text-sm font-black text-amber-950 flex items-center gap-2.5 font-mono shadow-2xs">
                       <span className="text-lg">🔑</span>
                       <span>{selectedQuestion.teacherAnswer.keyFormula}</span>
+                    </div>
+                  )}
+
+                  {/* Teacher Answer Video Lecture (Ingang) */}
+                  {selectedQuestion.teacherAnswer.videoUrl && (
+                    <div className="pt-1">
+                      <VideoLectureEmbed
+                        videoUrl={selectedQuestion.teacherAnswer.videoUrl}
+                        title={`${selectedQuestion.title} 선생님 인강 맞춤 해설`}
+                      />
                     </div>
                   )}
 
@@ -1299,13 +1378,21 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
                         {q.content}
                       </p>
 
-                      {/* Photo indicator badge */}
-                      {q.imageUrl && (
-                        <div className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-                          <ImageIcon className="w-3 h-3 text-amber-600" />
-                          <span>사진 첨부됨</span>
-                        </div>
-                      )}
+                      {/* Photo & Video indicator badges */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {q.imageUrl && (
+                          <div className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                            <ImageIcon className="w-3 h-3 text-amber-600" />
+                            <span>사진 첨부됨</span>
+                          </div>
+                        )}
+                        {q.teacherAnswer?.videoUrl && (
+                          <div className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
+                            <PlayCircle className="w-3 h-3 text-rose-600" />
+                            <span>인강 해설 수록</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Footer Info & Admin Action Hint */}
@@ -1369,6 +1456,17 @@ export const CommunityQnAView: React.FC<CommunityQnAViewProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Bottom-Right Quick Home Action Button */}
+      <button
+        type="button"
+        onClick={onGoBack}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full bg-white/95 backdrop-blur-md border-2 border-amber-400 text-slate-800 hover:bg-amber-50 shadow-xl text-xs sm:text-sm font-black transition-all hover:scale-105 active:scale-95 cursor-pointer touch-manipulation select-none"
+        title="홈 화면으로 바로가기"
+      >
+        <Home className="w-4 h-4 text-amber-600" />
+        <span>홈으로</span>
+      </button>
     </div>
   );
 };

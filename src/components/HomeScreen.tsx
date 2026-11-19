@@ -9,7 +9,6 @@ import teacherGradingMascotImg from '../assets/images/puleo_study_mascot_1788101
 interface HomeScreenProps {
   onSelectMath: () => void;
   onSelectScience: () => void;
-  onSelectWrongAnswers: () => void;
   onSelectAskQuestion?: () => void;
   onSelectQnA: () => void;
   onOpenProfile: () => void;
@@ -17,14 +16,11 @@ interface HomeScreenProps {
   userRole?: UserRole;
   solvedCount: number;
   waitingQuestionsCount?: number;
-  wrongQuestionsCount?: number;
-  unreviewedWrongCount?: number;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectMath,
   onSelectScience,
-  onSelectWrongAnswers,
   onSelectAskQuestion,
   onSelectQnA,
   onOpenProfile,
@@ -32,8 +28,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   userRole = 'student',
   solvedCount,
   waitingQuestionsCount = 0,
-  wrongQuestionsCount = 0,
-  unreviewedWrongCount = 0,
 }) => {
   return (
     <div id="home-screen-container" className="w-full max-w-md mx-auto px-3 sm:px-4 pb-8 flex flex-col items-center justify-between min-h-[92vh] select-none">
@@ -107,56 +101,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </motion.button>
 
-        {/* BUTTON 3: 나만의 스마트 오답노트 */}
-        <motion.button
-          id="btn-wrong-answers-note"
-          onClick={onSelectWrongAnswers}
-          whileHover={{ scale: 1.02, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          className="w-full py-3.5 px-4 sm:px-5 rounded-[26px] bg-white border-[3px] border-[#F43F5E] shadow-[0_8px_20px_rgba(244,63,94,0.18),0_2px_6px_rgba(0,0,0,0.04)] flex items-center justify-between group transition-all relative overflow-hidden"
-        >
-          {/* Top highlight bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-400 via-pink-400 to-amber-400 opacity-90" />
-
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white flex items-center justify-center text-xl shadow-md border-2 border-white group-hover:rotate-6 transition-transform relative">
-              📝
-              {unreviewedWrongCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-rose-600 text-white font-black text-[9px] rounded-full border border-white animate-pulse">
-                  {unreviewedWrongCount}
-                </span>
-              )}
-            </div>
-            <div className="text-left">
-              <span className="text-[11px] font-bold text-rose-600 tracking-wide uppercase flex items-center gap-1">
-                <span>중단원 &amp; 대단원 TEST 틀린 문제 복습</span>
-                {wrongQuestionsCount > 0 && (
-                  <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.2 rounded-md">
-                    총 {wrongQuestionsCount}문제
-                  </span>
-                )}
-              </span>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                <span>나만의 오답노트</span>
-                {unreviewedWrongCount > 0 ? (
-                  <span className="text-[11px] px-2 py-0.5 bg-rose-100 text-rose-800 font-black rounded-full border border-rose-200">
-                    복습 대기 {unreviewedWrongCount}
-                  </span>
-                ) : wrongQuestionsCount > 0 ? (
-                  <span className="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-800 font-black rounded-full border border-emerald-200">
-                    전체 복습 완료
-                  </span>
-                ) : null}
-              </h2>
-            </div>
-          </div>
-
-          <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors shadow-xs">
-            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-          </div>
-        </motion.button>
-
-        {/* BUTTON 4: 학생 Q&A 질문 & 답변 게시판 */}
+        {/* BUTTON 3: 학생 Q&A 질문 & 답변 게시판 */}
         <motion.button
           id="btn-community-qna"
           onClick={onSelectQnA}

@@ -39,9 +39,9 @@ export async function fetchQuestionsFromDB(): Promise<CommunityQuestion[]> {
     if (!isSupabaseConfigured) return getStoredQuestions();
 
     const { data, error } = await supabase
-      .from('qna_questions')
+      .from('questions')
       .select('*')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error || !Array.isArray(data)) return getStoredQuestions();
     return data as any;
@@ -50,17 +50,18 @@ export async function fetchQuestionsFromDB(): Promise<CommunityQuestion[]> {
   }
 }
 
-export async function saveTeacherAnswer(questionId: number | string, answerContent: string, answerImageUrl?: string) {
+export async function saveTeacherAnswer(questionId: string, answerContent: string, answerImageUrl?: string) {
   try {
     if (isSupabaseConfigured) {
-      await supabase
-        .from('qna_questions')
-        .update({
-          answer_content: answerContent,
-          answer_image_url: answerImageUrl || null,
-          status: '답변완료',
-        })
-        .eq('id', questionId);
+      const { error } = await supabase
+        .from('answers')
+        .insert({
+          question_id: questionId,
+          teacher_name: '선생님',
+          summary: answerContent,
+          solution_image_url: answerImageUrl || null,
+        });
+      if (error) return { success: false, error: error.message };
     }
     return { success: true };
   } catch (err: any) {

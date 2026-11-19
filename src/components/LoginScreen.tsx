@@ -294,16 +294,39 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   )}
                 </div>
 
+                {diagResult?.tableStatus && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {[
+                      { label: 'users', ok: diagResult.tableStatus.users },
+                      { label: 'textbook_problems', ok: diagResult.tableStatus.textbookProblems },
+                      { label: 'questions', ok: diagResult.tableStatus.questions },
+                      { label: 'answers', ok: diagResult.tableStatus.answers },
+                      { label: 'storage: images', ok: diagResult.tableStatus.imagesBucket },
+                    ].map((item) => (
+                      <span
+                        key={item.label}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 ${
+                          item.ok
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {item.ok ? <Check className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {diagResult?.status !== 'connected' && (
                   <div className="p-2 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                     <p className="font-bold flex items-center gap-1 text-amber-800">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                      데이터가 DB에 저장되지 않는 핵심 이유:
+                      연결 확인 필요 안내:
                     </p>
                     <ol className="list-decimal list-inside space-y-0.5 text-[10.5px] text-amber-950 pl-0.5">
-                      <li>현재 URL 도메인이 인터넷 DNS에서 조회되지 않습니다 (오타 또는 프로젝트 미생성/Paused).</li>
-                      <li>Supabase 대시보드 <strong>Project Settings → Data API</strong>의 <strong>Project URL</strong> 주소를 확인해주세요.</li>
-                      <li>AI Studio 상단 ⚙️ Settings에 올바른 URL을 등록하면 즉시 클라우드에 영구 저장됩니다.</li>
+                      <li>Supabase 테이블(users, textbook_problems, questions, answers) 및 RLS 정책을 확인해주세요.</li>
+                      <li>Storage 버킷(images)의 공개/업로드 권한 정책을 확인해주세요.</li>
                     </ol>
                   </div>
                 )}

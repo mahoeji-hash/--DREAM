@@ -1,21 +1,33 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Read Supabase environment variables from Vite or Next.js prefix
-const envUrl = (
+// Default Supabase project configuration provided for 풀어 DREAM
+const DEFAULT_SUPABASE_URL = 'https://pxucdmbdigykrwnpnvpq.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4O_ZnLPfkqnHoCzfQHv5oA_R7nhEkzM';
+
+function normalizeSupabaseUrl(rawUrl: string): string {
+  return rawUrl
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, '')
+    .replace(/\/+$/, '');
+}
+
+// Read Supabase environment variables from Vite or Next.js prefix, falling back to configured project
+const rawEnvUrl = (
   import.meta.env.VITE_SUPABASE_URL ||
   import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
-  ''
+  DEFAULT_SUPABASE_URL
 ).trim();
+
+const envUrl = normalizeSupabaseUrl(rawEnvUrl);
 
 const envKey = (
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  ''
+  DEFAULT_SUPABASE_ANON_KEY
 ).trim();
 
-// isSupabaseConfigured is true ONLY when explicit, valid environment variables are present
 export const isSupabaseConfigured = Boolean(
   envUrl &&
   envKey &&
@@ -25,13 +37,12 @@ export const isSupabaseConfigured = Boolean(
   envKey.length > 8
 );
 
-// Fallback dummy credentials when not configured (prevents createClient from throwing at module load)
-export const supabaseUrl = isSupabaseConfigured 
-  ? envUrl 
+export const supabaseUrl = isSupabaseConfigured
+  ? envUrl
   : 'https://placeholder-project.supabase.co';
 
-export const supabaseAnonKey = isSupabaseConfigured 
-  ? envKey 
+export const supabaseAnonKey = isSupabaseConfigured
+  ? envKey
   : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder_token';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -41,6 +52,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+export const SUPABASE_IMAGES_BUCKET = 'images';
+
+export function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export function isValidUuid(value?: string | null): boolean {
+  if (!value || typeof value !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 export interface SupabaseDiagnosticResult {
   isConfigured: boolean;
   url: string;
@@ -49,15 +78,17 @@ export interface SupabaseDiagnosticResult {
   message: string;
   details?: string;
   tableStatus?: {
-    userAccounts: boolean;
-    communityQuestions: boolean;
+    users: boolean;
     textbookProblems: boolean;
+    questions: boolean;
+    answers: boolean;
+    imagesBucket: boolean;
   };
 }
 
 export async function testSupabaseConnection(): Promise<SupabaseDiagnosticResult> {
-  const masked = envKey.length > 8 
-    ? `${envKey.slice(0, 6)}...${envKey.slice(-4)}` 
+  const masked = envKey.length > 8
+    ? `${envKey.slice(0, 8)}...${envKey.slice(-4)}`
     : '(키 없음)';
 
   if (!isSupabaseConfigured) {
@@ -72,64 +103,93 @@ export async function testSupabaseConnection(): Promise<SupabaseDiagnosticResult
   }
 
   try {
-    // 5초 타임아웃으로 빠른 테스트
     const timeoutPromise = new Promise<{ timeout: true }>((_, reject) =>
       setTimeout(() => reject(new Error('네트워크 연결 시간 초과 (5초). URL 도메인을 확인해주세요.')), 5000)
     );
 
     const queryPromise = (async () => {
-      // 1. 단일 연결 테스트 (user_accounts 조회)
-      const { error: err1 } = await supabase.from('user_accounts').select('id').limit(1);
-      if (err1 && (err1.message?.toLowerCase().includes('fetch') || err1.message?.toLowerCase().includes('failed to fetch'))) {
-        return { err1, err2: null, err3: null };
-      }
-      // 2. community_questions 확인
-      const { error: err2 } = await supabase.from('community_questions').select('id').limit(1);
-      // 3. textbook_problems 확인
-      const { error: err3 } = await supabase.from('textbook_problems').select('id').limit(1);
+      const [resUsers, resProblems, resQuestions, resAnswers, resImages] = await Promise.all([
+        supabase.from('users').select('id').limit(1),
+        supabase.from('textbook_problems').select('id').limit(1),
+        supabase.from('questions').select('id').limit(1),
+        supabase.from('answers').select('id').limit(1),
+        supabase.storage.from(SUPABASE_IMAGES_BUCKET).list('', { limit: 1 }),
+      ]);
 
-      return { err1, err2, err3 };
+      return {
+        errUsers: resUsers.error,
+        errProblems: resProblems.error,
+        errQuestions: resQuestions.error,
+        errAnswers: resAnswers.error,
+        errImages: resImages.error,
+      };
     })();
 
-    const result = await Promise.race([queryPromise, timeoutPromise]) as {
-      err1: any;
-      err2: any;
-      err3: any;
+    const result = (await Promise.race([queryPromise, timeoutPromise])) as {
+      errUsers: any;
+      errProblems: any;
+      errQuestions: any;
+      errAnswers: any;
+      errImages: any;
     };
 
     const isFetchError = (msg?: string) =>
       Boolean(msg && (msg.toLowerCase().includes('fetch failed') || msg.toLowerCase().includes('failed to fetch')));
 
-    if (result.err1 && isFetchError(result.err1.message)) {
+    if (result.errUsers && isFetchError(result.errUsers.message)) {
       return {
         isConfigured: true,
         url: supabaseUrl,
         keyMasked: masked,
         status: 'error',
-        message: '서버 주소 연결 실패 (도메인을 찾을 수 없음 또는 오타)',
-        details: `${supabaseUrl} 주소로 접속할 수 없습니다. Supabase 대시보드 [Project Settings] -> [API]의 'Project URL'을 복사하여 환경변수에 등록해주세요.`,
+        message: '서버 주소 연결 실패 (도메인을 찾을 수 없음 또는 네트워크 오류)',
+        details: `${supabaseUrl} 주소로 접속할 수 없습니다.`,
       };
     }
 
-    if (result.err1 && (result.err1.code === 'PGRST204' || result.err1.message?.includes('relation "public.user_accounts" does not exist'))) {
+    const firstPermErr = [result.errUsers, result.errProblems, result.errQuestions, result.errAnswers].find(
+      (e) => e && (e.code === '42501' || e.message?.toLowerCase().includes('permission denied'))
+    );
+    if (firstPermErr) {
       return {
         isConfigured: true,
         url: supabaseUrl,
         keyMasked: masked,
         status: 'error',
-        message: 'Supabase 연결은 되었으나 테이블이 생성되지 않았습니다.',
-        details: 'SQL Editor에서 제공해 드린 통합 테이블 생성 SQL을 실행해주세요.',
+        message: 'RLS(행 단위 보안) 권한 오류: 테이블 읽기/쓰기 정책을 확인해주세요.',
+        details: firstPermErr.message,
       };
     }
 
-    if (result.err1 && (result.err1.code === '42501' || result.err1.message?.includes('permission denied'))) {
+    const tableStatus = {
+      users: !result.errUsers,
+      textbookProblems: !result.errProblems,
+      questions: !result.errQuestions,
+      answers: !result.errAnswers,
+      imagesBucket: !result.errImages,
+    };
+
+    const allTablesOk =
+      tableStatus.users &&
+      tableStatus.textbookProblems &&
+      tableStatus.questions &&
+      tableStatus.answers;
+
+    if (!allTablesOk) {
+      const missing: string[] = [];
+      if (!tableStatus.users) missing.push('users');
+      if (!tableStatus.textbookProblems) missing.push('textbook_problems');
+      if (!tableStatus.questions) missing.push('questions');
+      if (!tableStatus.answers) missing.push('answers');
+
       return {
         isConfigured: true,
         url: supabaseUrl,
         keyMasked: masked,
         status: 'error',
-        message: 'RLS(행 단위 보안) 권한 오류: 테이블 읽기/쓰기가 차단되었습니다.',
-        details: 'SQL Editor에서 RLS 정책 생성 스크립트를 실행해주세요.',
+        message: `일부 테이블(${missing.join(', ')}) 접근에 실패했습니다.`,
+        details: '테이블 이름 및 RLS 정책을 확인해주세요.',
+        tableStatus,
       };
     }
 
@@ -138,12 +198,8 @@ export async function testSupabaseConnection(): Promise<SupabaseDiagnosticResult
       url: supabaseUrl,
       keyMasked: masked,
       status: 'connected',
-      message: 'Supabase 클라우드 데이터베이스에 정상적으로 연결되었습니다!',
-      tableStatus: {
-        userAccounts: !result.err1,
-        communityQuestions: !result.err2,
-        textbookProblems: !result.err3,
-      },
+      message: 'Supabase 클라우드 DB(users, textbook_problems, questions, answers) 및 Storage(images)와 정상 연결되었습니다!',
+      tableStatus,
     };
   } catch (err: any) {
     return {
@@ -152,10 +208,7 @@ export async function testSupabaseConnection(): Promise<SupabaseDiagnosticResult
       keyMasked: masked,
       status: 'error',
       message: '연결 실패: ' + (err.message || '알 수 없는 네트워크 오류'),
-      details: 'URL 주소의 오타 또는 Supabase 프로젝트 일시중지(Paused) 상태를 확인해주세요.',
+      details: 'URL 주소 또는 Supabase 프로젝트 상태를 확인해주세요.',
     };
   }
 }
-
-
-

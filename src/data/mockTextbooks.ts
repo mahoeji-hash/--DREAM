@@ -43,13 +43,16 @@ const PROBLEMS_STORAGE_KEY = 'puleo_dream_stored_problems_v9';
 // Helper to sanitize problems for localStorage when quota is tight
 function sanitizeProblemsForLocalStorage(problems: ProblemItem[]): ProblemItem[] {
   return problems.map((p) => {
-    // If solutionImage is a massive base64 string (>30KB), strip it in localStorage copy
+    let copy: any = { ...p };
+    // If solutionImage or problemImage is a massive base64 string (>30KB), strip it in localStorage copy
     // (the full image remains safely in IndexedDB and Supabase)
-    if (p.solutionImage && p.solutionImage.startsWith('data:') && p.solutionImage.length > 30000) {
-      const { solutionImage: _unused, ...rest } = p;
-      return rest as ProblemItem;
+    if (copy.solutionImage && typeof copy.solutionImage === 'string' && copy.solutionImage.startsWith('data:') && copy.solutionImage.length > 30000) {
+      delete copy.solutionImage;
     }
-    return p;
+    if (copy.problemImage && typeof copy.problemImage === 'string' && copy.problemImage.startsWith('data:') && copy.problemImage.length > 30000) {
+      delete copy.problemImage;
+    }
+    return copy as ProblemItem;
   });
 }
 
